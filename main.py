@@ -85,45 +85,35 @@ def main():
         import traceback
         traceback.print_exc() # Print detailed traceback
 
-
-    # --- 7. Run Inference ---
+# --- 7. Run Inference ---
     print("\nStarting Inference Phase...")
-    # The `generate_sequence` function needs adaptation for the Transformer's `generate` method.
-    # We'll create a simple prompt and use the model's `generate` method directly here.
+    # Import the updated inference function
+    from inference import run_generation # <-- Import the new function
 
-    model.eval() # Ensure model is in eval mode
-    model.to(config.DEVICE) # Ensure model is on correct device
-
-    # Create a starting prompt (e.g., the BOS token)
-    start_text = tokenizer.bos_token if tokenizer.bos_token else "<|endoftext|>" # Use BOS or a common start token
-    start_ids = tokenizer.encode(start_text, return_tensors='pt').to(config.DEVICE) # Shape (1, num_start_tokens)
-
-    print(f"\nGenerating sequence starting with: '{start_text}' (IDs: {start_ids.tolist()})")
-    print(f"Max new tokens: {config.GENERATION_MAX_LEN}")
+    # Define the starting prompt
+    start_text = tokenizer.bos_token if tokenizer.bos_token else "<|endoftext|>"
 
     try:
-        with torch.no_grad():
-            generated_ids = model.generate(
-                idx=start_ids,
-                max_new_tokens=config.GENERATION_MAX_LEN,
-                temperature=0.8, # Add some temperature for less deterministic output
-                top_k=50         # Add top-k sampling
-            )
-
-        generated_text = tokenizer.decode(generated_ids[0].tolist(), skip_special_tokens=True)
-
-        print("\n--- Generation Complete ---")
-        print(f"Generated IDs: {generated_ids[0].tolist()}")
-        print(f"\nGenerated Text:\n---\n{generated_text}\n---")
+        # Call the dedicated inference function
+        generated_ids, generated_text = run_generation(
+            model=model,
+            tokenizer=tokenizer,
+            prompt_text=start_text,
+            device=config.DEVICE,
+            max_new_tokens=config.GENERATION_MAX_LEN,
+            temperature=0.8, # Example temperature
+            top_k=50         # Example top-k
+        )
+        # Optional: Do something with the results if needed
+        # if generated_text:
+        #     print("Inference successful.")
 
     except Exception as e:
-        print(f"\nAn error occurred during inference: {e}")
+        print(f"\nAn error occurred during inference execution: {e}")
         import traceback
-        traceback.print_exc() # Print detailed traceback
-
+        traceback.print_exc()
 
     print("\n--- Workflow Finished ---")
 
 if __name__ == "__main__":
     main()
-
