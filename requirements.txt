@@ -1,0 +1,10 @@
+torch>=1.10 # Specify a reasonable minimum version
+
+# Hugging Face libraries for datasets and tokenizers/transformers
+datasets>=2.0.0
+transformers>=4.20.0
+
+# progress bars
+tqdm>=4.60.0
+
+
