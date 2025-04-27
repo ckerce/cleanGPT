@@ -85,7 +85,7 @@ def main():
         import traceback
         traceback.print_exc() # Print detailed traceback
 
-# --- 7. Run Inference ---
+    # --- 7. Run Inference ---
     print("\nStarting Inference Phase...")
     # Import the updated inference function
     from inference import run_generation # <-- Import the new function
