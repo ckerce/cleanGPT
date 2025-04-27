@@ -4,7 +4,7 @@
 
 cleanGPT is a PyTorch-based project designed to provide a clean, modular, and understandable environment for training and experimenting with sequence-to-sequence Transformer models. It prioritizes code clarity and separation of concerns, making it easier to modify, extend, and swap different model architectures.
 
-This project was initially adapted from an implementation focusing on the **Simplified Attention with Shifted Projections (SAS-P)** architecture.
+This project was initially adapted from an implementation focusing on the **Simplified Attention Sub-Block with Projections and Value options (SAS-PV / SAS-P / SAS)** architectures.
 
 ## Project Structure
 
