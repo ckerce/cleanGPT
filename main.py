@@ -14,7 +14,7 @@ from config import GPTConfig # Import the config dataclass
 from data_utils import load_and_prepare_data # Data loading/prep function
 from model import SASPTransformerModel # <-- Import the new Transformer model
 from trainer import Trainer      # Training loop class
-from inference import generate_sequence # Inference function (needs adaptation)
+#from inference import generate_sequence # Inference function
 
 def main():
     """Main function to run the workflow."""

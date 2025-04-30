@@ -345,8 +345,9 @@ class SASPTransformerModel(nn.Module):
             # Flatten the logits and labels for the loss function
             # Logits: (batch * seq_len, vocab_size)
             # Labels: (batch * seq_len)
-            # Use ignore_index for padding tokens if padding_idx is set
-            loss_fct = nn.CrossEntropyLoss(ignore_index=self.padding_idx if self.padding_idx is not None else -100)
+            # Use ignore_index=-100, which is the standard for Hugging Face collators
+            # when padding labels.
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
 
         # Return dictionary compatible with Trainer
