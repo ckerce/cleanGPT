@@ -1,97 +1,195 @@
 # cleanGPT
 
-## Overview
+A clean, modular implementation of transformer-based language models for research and experimentation.
 
-cleanGPT is a PyTorch-based project designed to provide a clean, modular, and understandable environment for training and experimenting with sequence-to-sequence Transformer models. It prioritizes code clarity and separation of concerns, making it easier to modify, extend, and swap different model architectures.
+## Project Overview
 
-This project was initially adapted from an implementation focusing on the **Simplified Attention Sub-Block with Projections and Value options (SAS-PV / SAS-P / SAS)** architectures.
+cleanGPT provides a flexible framework for training and experimenting with different transformer architectures, focusing on:
+
+- **Modularity**: Easily swap tokenizers, model architectures, and training strategies
+- **Clarity**: Clean, well-documented code that's easy to understand and modify
+- **Extensibility**: Simple interfaces for adding new components
+
+The project includes implementations of multiple transformer architectures, including a standard Vanilla Transformer and the Simplified Attention Sub-Block with Projections (SASP) variant.
 
 ## Project Structure
 
-The codebase is organized into several distinct Python modules:
+```
+cleanGPT/
+├── main.py                      # Main entry point
+├── config.py                    # Configuration management
+├── tokenizers/                  # Tokenizer implementations
+│   ├── __init__.py              # Exports factory functions
+│   ├── base_tokenizer.py        # Abstract base class 
+│   ├── character_tokenizer.py   # Character-level tokenization
+│   ├── gpt2_tokenizer.py        # GPT-2 tokenizer wrapper
+│   └── factory.py               # Factory for creating tokenizers
+├── utils/                       # Utility functions
+│   ├── __init__.py              # Exports utilities
+│   ├── data_utils.py            # Data loading and preparation
+│   └── token_statistics.py      # Token usage analysis tools
+├── model/                       # Model definitions
+│   ├── __init__.py              # Factory for model selection
+│   ├── model_SASPV.py           # SASP implementation
+│   └── model_Vanilla.py         # Standard transformer
+├── trainers/                    # Training implementations
+│   ├── __init__.py              # Exports trainer factory
+│   ├── base_trainer.py          # Abstract base trainer
+│   └── simple_trainer.py        # Basic training loop
+├── inference/                   # Generation utilities
+│   ├── __init__.py              # Exports inference functions
+│   ├── generation.py            # Text generation functions
+│   └── sampling_strategies.py   # Different sampling approaches
+└── examples/                    # Example scripts
+    └── token_analysis.py        # Token usage analysis example
+```
 
-* **`config.py`**: Centralizes configuration settings, including dataset parameters, model hyperparameters (using `GPTConfig`), training options, and device setup.
-* **`model.py`**: Defines the neural network architectures. It currently includes the `SASPTransformerModel` built from SAS-P components (`SimplifiedTransformerBlock`, `CausalShapedAttention`, `SASMLP`, `SASLayerNorm`) and can be easily extended with other model types.
-* **`data_utils.py`**: Handles data loading (using Hugging Face `datasets`), tokenization (using Hugging Face `transformers`), preprocessing, and DataLoader creation.
-* **`trainer.py`**: Contains the `Trainer` class, encapsulating the model training loop logic (forward pass, loss calculation, backpropagation, optimization).
-* **`inference.py`**: Provides utility functions for generating text sequences using a trained model (e.g., `run_generation`).
-* **`main.py`**: The main orchestration script that imports components, initializes the chosen model, data, trainer, and runs the training and inference workflow.
+## Features
 
-## Core Architecture: SAS-P Transformer
+- **Multiple Tokenization Strategies**: Character-level, GPT-2, with consistent interface
+- **Flexible Model Architectures**: 
+  - Vanilla Transformer with Pre-LayerNorm
+  - SASP Transformer (Simplified Attention Sub-Block with Projections)
+- **Extensible Training**: Modular training loop with customizable strategies
+- **Advanced Text Generation**: Multiple sampling methods (greedy, top-k, top-p, etc.)
+- **Token Analysis Tools**: Analyze tokenizer performance and optimize vocabularies
 
-The primary model implemented in this repository is based on the **Simplified Transformer Block** architecture.
+## Getting Started
 
-Details for the method come from the paper [Simplifying Transformer Blocks](https://arxiv.org/abs/2311.01906) by Bobby He and Thomas Hofmann @ ETH Zurich. Their approach uses signal propagation concepts and careful experimental analysis to trim down and re-organize the standard Transformer block.
+### Installation
 
-Key features of the SAS-P architecture include:
+```bash
+git clone https://github.com/yourusername/cleanGPT.git
+cd cleanGPT
+pip install -r requirements.txt
+```
 
-1.  **Reduced Normalization:** Fewer LayerNorm components compared to standard Pre-LN or Post-LN blocks.
-2.  **Parallelized Layers:** The multi-head attention (specifically, Causal Shaped Attention) and the feed-forward network (MLP) are processed in parallel branches.
-3.  **No Skip Connections:** Traditional residual skip connections are removed.
-4.  **Component Simplification:** The research suggests that the Value (V) matrix in attention and the post-attention Projection matrix (W_O) might not be strictly necessary for stable training in this simplified structure, potentially reducing parameter count.
+### Training a Model
 
-<p align="center">
-  <img src="path/to/your/assets/SAS-P.png" alt="SAS-P Block Diagram" style="width: 80%; height: auto;">
-  <em>Figure 1: Simplified Transformer Block (SAS-P) Architecture (Source: He & Hofmann, 2023)</em>
-</p>
+```bash
+python main.py --model_type SASP --tokenizer_type gpt2 --n_layer 6 --n_head 6 --n_embd 384
+```
 
-The attention mechanism used is **Causal Shaped Attention**, which incorporates specific learnable parameters (`alpha`, `beta`, `gamma`) and buffer components (`MC`, `Id`) to modify the standard attention mechanism. This is detailed further in [Noci, Li, Li, He, Hoffman, Madison, and Roy; The Shaped Transformer: Attention Models in the Infinite Depth-and-Width Limit](https://arxiv.org/abs/2306.17759).
+### Analyzing Token Usage
 
-The core Python classes implementing this architecture in `model.py` are:
+```bash
+python examples/token_analysis.py --dataset wikitext --tokenizer_type gpt2 --max_samples 1000 --plot
+```
 
-* `SASLayerNorm`: Custom Layer Normalization with optional bias.
-* `SASMLP`: The feed-forward network component (with an optional LLaMA-style variant).
-* `CausalShapedAttention`: The modified multi-head self-attention mechanism.
-* `SimplifiedTransformerBlock`: Combines LayerNorm, Attention, and MLP according to the SAS-P structure.
-* `SASPTransformerModel`: The complete GPT-like model composed of embedding layers and multiple `SimplifiedTransformerBlock` layers.
+## Core Components
 
-### SAS-P Algorithm Steps
+### Tokenizers
 
-The parallel processing within the `SimplifiedTransformerBlock` follows these general steps:
+The `tokenizers` module provides a unified interface for different tokenization strategies:
 
-<p align="center">
-  <img src="path/to/your/assets/SAS-P_Algorithm_Steps.png" alt="SAS-P Algorithm Steps" style="width: 80%; height: auto;">
-  <em>Figure 2: SAS-P Algorithm Steps (Parallel Attention and MLP)</em>
-</p>
+```python
+from tokenizers import create_tokenizer
 
-## Usage
+# Create a GPT-2 tokenizer
+tokenizer = create_tokenizer("gpt2")
 
-1.  **Setup:** Ensure you have PyTorch and the Hugging Face `datasets` and `transformers` libraries installed.
-    ```bash
-    pip install torch datasets transformers tqdm
-    ```
-2.  **Configure:** Adjust parameters in `config.py` as needed (dataset, model size, training settings).
-3.  **Run:** Execute the main script.
-    ```bash
-    python main.py
-    ```
-    The script will handle data loading, model initialization, training, and a final inference step.
+# Tokenize text
+encoded = tokenizer.encode("Hello, world!")
+decoded = tokenizer.decode(encoded)
+```
 
-## Configuration
+### Models
 
-Most hyperparameters and settings can be modified directly in `config.py`:
+The `model` module contains different transformer architectures:
 
-* **Dataset:** `DATASET_NAME`, `DATASET_CONFIG`, `MAX_SAMPLES`.
-* **Model:** Modify the `GPTConfig` dataclass for `block_size`, `vocab_size` (set dynamically), `n_layer`, `n_head`, `n_embd`, `dropout`, `bias`, and SAS-P specific flags (`use_proj`, `use_v`, `llama_mlp`).
-* **Training:** `BATCH_SIZE`, `NUM_EPOCHS`, `LEARNING_RATE`.
-* **Inference:** `GENERATION_MAX_LEN`.
+```python
+from model import get_model
+from config import GPTConfig
 
-## Extending the Model
+# Create model configuration
+config = GPTConfig(
+    model_type="SASP",
+    n_layer=6,
+    n_head=6,
+    n_embd=384,
+    vocab_size=50257
+)
 
-The modular structure makes it easy to add or modify model architectures:
+# Initialize model
+model = get_model(config.model_type, config=config)
+```
 
-1.  Define your new model class (e.g., `MyTransformerModel`) in `model.py`. Ensure its `forward` method returns a dictionary containing at least a `'loss'` key when labels are provided. Implement a `.generate()` method for inference.
-2.  Import your new model in `main.py`.
-3.  Change the model initialization line in `main.py` to use your new class:
-    ```python
-    # from model import SASPTransformerModel
-    from model import MyTransformerModel # Import your model
+### Training
 
-    # ... inside main() ...
+The `trainers` module handles model training:
 
-    # model = SASPTransformerModel(config=model_config)
-    model = MyTransformerModel(config=model_config) # Instantiate your model
-    ```
-4.  Adjust the `GPTConfig` in `config.py` or create a new config class if your model requires different parameters.
+```python
+from trainers import get_trainer
 
-The existing `Trainer` and `data_utils` should largely remain compatible as long as the model interface (input/output of `forward`, existence of `.parameters()`, `.generate()`) is consistent.
+trainer = get_trainer(
+    trainer_type="simple",
+    model=model,
+    dataloader=dataloader,
+    optimizer=optimizer,
+    device=device,
+    num_epochs=5
+)
+
+# Train the model
+trainer.train()
+```
+
+### Inference
+
+The `inference` module provides text generation capabilities:
+
+```python
+from inference.generation import run_generation
+
+# Generate text from a prompt
+generated_ids, generated_text = run_generation(
+    model=model,
+    tokenizer=tokenizer,
+    prompt_text="Once upon a time",
+    device=device,
+    max_new_tokens=50,
+    temperature=0.8,
+    top_k=50
+)
+```
+
+## Extending the Framework
+
+### Adding a New Tokenizer
+
+1. Create a new class in `tokenizers/` that inherits from `BaseTokenizer`
+2. Implement all required methods
+3. Register it in `TokenizerFactory.TOKENIZER_TYPES`
+
+### Adding a New Model Architecture
+
+1. Create a new model class in `model/`
+2. Register it in `MODEL_REGISTRY` in `model/__init__.py`
+
+### Adding a New Training Strategy
+
+1. Create a new trainer class in `trainers/` that inherits from `BaseTrainer` 
+2. Register it in `TRAINER_REGISTRY` in `trainers/__init__.py`
+
+## Requirements
+
+- Python 3.8+
+- PyTorch 1.10+
+- Transformers 4.20.0+
+- Datasets 2.0.0+
+- tqdm
+
+## Citation
+
+If you use this codebase in your research, please cite:
+
+```
+@software{cleangpt2023,
+  author = {Clayton Kerce},
+  title = {cleanGPT: Transformer Architecture Sandbox for Exploration of Language Models Features},
+  year = {2023},
+  url = {https://github.com/ckerce/cleanGPT}
+}
+```
+
+

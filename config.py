@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-############################################
-#                                          #
-#  Configuration Settings                  #
-#                                          #
-############################################
+# ./config.py
+"""
+Configuration Settings for cleanGPT
+Enhanced for modular tokenization and model architecture
+"""
 
 import torch
 import time
-from dataclasses import dataclass # Use dataclass for config
+from dataclasses import dataclass, field
+from typing import Dict, List, Union, Optional, Any
 
 # --- Dataset ---
 DATASET_NAME = "wikipedia"
@@ -15,40 +15,63 @@ DATASET_CONFIG = "20220301.simple"
 MAX_SAMPLES = 10000
 
 # --- Tokenizer ---
-TOKENIZER_NAME = "gpt2" # Uses BPE
+TOKENIZER_TYPE = "gpt2"  # Options: "character", "gpt2", "byte_level", etc.
+TOKENIZER_PARAMS = {
+    "use_fast": True,
+}
 
 # --- Model Config ---
-# Parameters for the SASP Transformer Model
 @dataclass
 class GPTConfig:
-    block_size: int = 128      # Max sequence length (context window)
-    vocab_size: int = 50257    # Set dynamically later from tokenizer
-    n_layer: int = 6           # Number of transformer layers
-    n_head: int = 6            # Number of attention heads
-    n_embd: int = 384          # Embedding dimension (must be divisible by n_head)
-    dropout: float = 0.1       # Dropout rate
-    bias: bool = False         # Use bias in Linear layers and LayerNorm?
-    # SASP Specific Configs (can be overridden)
-    use_proj: bool = False     # Use projection layer in CausalShapedAttention
-    use_v: bool = False        # Use Value vector in CausalShapedAttention (QK vs QKV)
-    llama_mlp: bool = False    # Use LLaMA-style MLP variant (requires specific N calc)
-    transformer_block_type: str = 'PreLN' # Type of block ('SASP', 'PreLN', etc.)
-
-# --- Training ---
-BATCH_SIZE = 32 
-NUM_EPOCHS = 5 
-LEARNING_RATE = 1e-4 # Adjusted LR for transformer
-# TARGET_PARAM_VALUE = 0.75 # No longer needed for transformer
-
-# --- Inference ---
-GENERATION_MAX_LEN = 50 # Increased slightly
+    """Configuration for Transformer models."""
+    
+    # Core parameters
+    block_size: int = 128                # Max sequence length (context window)
+    vocab_size: int = None               # Set dynamically from tokenizer
+    n_layer: int = 6                     # Number of transformer layers
+    n_head: int = 6                      # Number of attention heads
+    n_embd: int = 384                    # Embedding dimension (must be divisible by n_head)
+    dropout: float = 0.1                 # Dropout rate
+    bias: bool = False                   # Use bias in Linear layers and LayerNorm?
+    padding_idx: Optional[int] = None    # Padding token ID from tokenizer
+    
+    # Architecture selection
+    model_type: str = "SASP"             # Model architecture type: "SASP", "Vanilla", etc.
+    
+    # SASP Specific Configs
+    use_proj: bool = False               # Use projection in CausalShapedAttention
+    use_v: bool = False                  # Use Value vector in CausalShapedAttention
+    llama_mlp: bool = False              # Use LLaMA-style MLP 
+    transformer_block_type: str = 'SASP' # SASP vs PreLN block structure
+    
+    # Training settings
+    batch_size: int = 32                 # Training batch size
+    num_epochs: int = 5                  # Number of training epochs
+    learning_rate: float = 1e-4          # Learning rate for optimizer
+    weight_decay: float = 0.01           # Weight decay for regularization
+    
+    # Inference settings
+    generation_max_len: int = 50         # Maximum new tokens for generation
+    temperature: float = 0.8             # Sampling temperature
+    top_k: int = 50                      # Top-k sampling parameter
+    
+    # Extra fields for user extensions
+    extra_args: Dict[str, Any] = field(default_factory=dict)
+    
+    def update_from_tokenizer(self, tokenizer):
+        """Update config based on tokenizer properties."""
+        self.vocab_size = tokenizer.vocab_size
+        self.padding_idx = tokenizer.pad_token_id
+        # Use tokenizer's max length if it's smaller than our block_size
+        if hasattr(tokenizer, 'model_max_length') and tokenizer.model_max_length < self.block_size:
+            self.block_size = tokenizer.model_max_length
 
 # --- Environment ---
 # Determine device
 if torch.cuda.is_available():
     DEVICE = torch.device("cuda")
     DEVICE_NAME = torch.cuda.get_device_name(0)
-elif torch.backends.mps.is_available():
+elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
     DEVICE = torch.device("mps")
     DEVICE_NAME = "MPS (Apple Silicon GPU)"
 else:
@@ -58,17 +81,23 @@ else:
 CURRENT_TIME = time.strftime('%Y-%m-%d %H:%M:%S %Z')
 
 # --- Function to print config ---
-def print_config(cfg: GPTConfig = None): # Accept optional config object
+def print_config(cfg: GPTConfig = None): 
+    """Print the configuration settings."""
     print("--- Configuration ---")
     print(f"Run Time: {CURRENT_TIME}")
     print(f"Device: {DEVICE_NAME} ({DEVICE})")
+    
     print("\n[Dataset]")
-    print(f"  Name: {DATASET_NAME} ({DATASET_CONFIG})")
+    print(f"  Name: {DATASET_NAME}" + (f" ({DATASET_CONFIG})" if DATASET_CONFIG else ""))
     print(f"  Max Samples: {MAX_SAMPLES}")
+    
     print("\n[Tokenizer]")
-    print(f"  Name: {TOKENIZER_NAME}")
-    if cfg: # Print model config if provided
-        print("\n[Model: GPTConfig]")
+    print(f"  Type: {TOKENIZER_TYPE}")
+    print(f"  Parameters: {TOKENIZER_PARAMS}")
+    
+    if cfg: 
+        print("\n[Model Config]")
+        print(f"  Model Type: {cfg.model_type}")
         print(f"  Block Size (Max Seq Len): {cfg.block_size}")
         print(f"  Vocab Size: {cfg.vocab_size}")
         print(f"  Embedding Dim (n_embd): {cfg.n_embd}")
@@ -76,14 +105,62 @@ def print_config(cfg: GPTConfig = None): # Accept optional config object
         print(f"  Num Heads (n_head): {cfg.n_head}")
         print(f"  Dropout: {cfg.dropout}")
         print(f"  Bias: {cfg.bias}")
-        print(f"  Transformer Block Type: {cfg.transformer_block_type}")
-        print(f"  SASP Use Proj: {cfg.use_proj}")
-        print(f"  SASP Use V: {cfg.use_v}")
-        print(f"  SASP LLaMA MLP: {cfg.llama_mlp}")
-    print("\n[Training]")
-    print(f"  Batch Size: {BATCH_SIZE}")
-    print(f"  Num Epochs: {NUM_EPOCHS}")
-    print(f"  Learning Rate: {LEARNING_RATE}")
-    print("\n[Inference]")
-    print(f"  Generation Max Length: {GENERATION_MAX_LEN}")
+        
+        if cfg.model_type == "SASP":
+            print(f"  Transformer Block Type: {cfg.transformer_block_type}")
+            print(f"  SASP Use Proj: {cfg.use_proj}")
+            print(f"  SASP Use V: {cfg.use_v}")
+            print(f"  SASP LLaMA MLP: {cfg.llama_mlp}")
+        
+        print("\n[Training]")
+        print(f"  Batch Size: {cfg.batch_size}")
+        print(f"  Num Epochs: {cfg.num_epochs}")
+        print(f"  Learning Rate: {cfg.learning_rate}")
+        print(f"  Weight Decay: {cfg.weight_decay}")
+        
+        print("\n[Inference]")
+        print(f"  Generation Max Length: {cfg.generation_max_len}")
+        print(f"  Temperature: {cfg.temperature}")
+        print(f"  Top-k: {cfg.top_k}")
+        
+        # Print any extra arguments
+        if cfg.extra_args:
+            print("\n[Extra Args]")
+            for k, v in cfg.extra_args.items():
+                print(f"  {k}: {v}")
+    
     print("--------------------")
+
+
+def create_config_from_args(args):
+    """
+    Create a config object from command line arguments.
+    
+    Args:
+        args: Parsed command line arguments
+        
+    Returns:
+        GPTConfig object with values from args
+    """
+    # Create a base config
+    config = GPTConfig()
+    
+    # Update fields from args if they exist
+    for field_name in [f.name for f in fields(GPTConfig)]:
+        if hasattr(args, field_name):
+            setattr(config, field_name, getattr(args, field_name))
+    
+    # Handle special cases and derived values
+    if hasattr(args, 'device'):
+        global DEVICE, DEVICE_NAME
+        if args.device == 'cpu':
+            DEVICE = torch.device('cpu')
+            DEVICE_NAME = 'CPU'
+        elif args.device == 'cuda' and torch.cuda.is_available():
+            DEVICE = torch.device('cuda')
+            DEVICE_NAME = torch.cuda.get_device_name(0)
+        elif args.device == 'mps' and torch.backends.mps.is_available():
+            DEVICE = torch.device('mps')
+            DEVICE_NAME = 'MPS (Apple Silicon GPU)'
+    
+    return config
