@@ -1,4 +1,3 @@
-# ./tokenizers/__init__.py
 """
 Tokenizers module for cleanGPT
 Provides tokenization for various transformer models

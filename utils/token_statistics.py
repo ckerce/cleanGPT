@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm.auto import tqdm
 
-from ..tokenizers import BaseTokenizer
+from mytokenizers import BaseTokenizer
 
 logger = logging.getLogger(__name__)
 

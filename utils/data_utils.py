@@ -12,7 +12,12 @@ from torch.utils.data import DataLoader, Dataset
 from datasets import load_dataset
 from transformers import DataCollatorForLanguageModeling
 
-from ..tokenizers import BaseTokenizer
+from mytokenizers import BaseTokenizer
+
+
+
+
+
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ import logging
 from tqdm.auto import tqdm
 from typing import Tuple, List, Dict, Optional, Union, Any
 
-from ..tokenizers import BaseTokenizer
+from mytokenizers import BaseTokenizer
 
 logger = logging.getLogger(__name__)
 
