@@ -1,16 +1,13 @@
 # -*- coding: utf-8 -*-
-############################################
-#                                          #
-#  Model Definitions with SASP             #
-#                                          #
-############################################
+"""
+SASP Transformer Model Implementation
+Based on the Simplified Attention Sub-Block with Projections and Value options (SAS-PV)
+"""
 
 import math
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-
-# --- SASP Building Blocks ---
 
 class SASLayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -41,11 +38,9 @@ class SASMLP(nn.Module):
             N = int(2.1 / 3. * 4 * config.n_embd)
             # Ensure N is reasonable, maybe enforce multiple of 8 or more?
             N = (N + 7) // 8 * 8 # Example: round up to multiple of 8
-            print(f"  LLaMA MLP intermediate size N: {N}")
             self.c_gate = nn.Linear(config.n_embd, N, bias=config.bias) # Renamed c_mask to c_gate for clarity
         else:
             N = int(4 * config.n_embd)
-            print(f"  Standard MLP intermediate size N: {N}")
 
         self.c_fc    = nn.Linear(config.n_embd, N, bias=config.bias)
         self.actv    = nn.GELU() # GELU is common, Swish/SiLU used in LLaMA
@@ -94,8 +89,6 @@ class CausalShapedAttention(nn.Module):
         # Use bfloat16 if supported for parameters and buffers
         param_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float32
         buffer_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float32
-        print(f"  Using dtype {param_dtype} for SASP attention parameters.")
-        print(f"  Using dtype {buffer_dtype} for SASP attention buffers.")
 
         # Parameters specific to the shaped attention
         self.alpha = nn.Parameter(torch.tensor(1.0, dtype=param_dtype))
@@ -148,10 +141,6 @@ class CausalShapedAttention(nn.Module):
 
         # --- Shaped Attention Calculation ---
         # 1. Standard Scaled Dot-Product Attention Score
-        # att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T, T)
-        # Use optimized flash attention if available
-        # NOTE: Flash Attention might not directly support the subsequent modifications (alpha, beta, gamma).
-        # Sticking to manual matmul for clarity with SASP modifications.
         att_scores = (q @ k.transpose(-2, -1)) * (k.size(-1)**-0.5) # More stable scaling
 
         # 2. Apply Causal Mask
@@ -214,27 +203,20 @@ class SimplifiedTransformerBlock(nn.Module):
         mlp_output = self.mlp(norm_x)
         # Combine using learned beta parameters - This is the SASP formulation
         # Note: This differs from standard residual connection (x = x + attn_output + mlp_output)
-        x = self.beta_SA * attn_output + self.beta_FF * mlp_output
+        x = 0.1 * x + self.beta_SA * attn_output + self.beta_FF * mlp_output
         return x
 
 
-# --- Main SASP Transformer Model ---
-
 class SASPTransformerModel(nn.Module):
+    """
+    Transformer model using Simplified Attention Sub-Block (SASP) architecture
+    """
     def __init__(self, config):
         super().__init__()
         assert config.vocab_size is not None
         assert config.block_size is not None
         self.config = config
-        self.padding_idx = config.padding_idx # Store padding index
-
-        # Determine the transformer block class based on config
-        # Add more options here if needed (e.g., 'PreLN' for standard block)
-        if config.transformer_block_type == 'SASP':
-            self.transformer_block = SimplifiedTransformerBlock
-            print(f"\nUsing Transformer Block Type: {config.transformer_block_type}")
-        else:
-            raise ValueError(f"Unsupported transformer_block_type: {config.transformer_block_type}")
+        self.padding_idx = getattr(config, 'padding_idx', None)
 
         # Define the model architecture using nn.ModuleDict
         self.transformer = nn.ModuleDict(dict(
@@ -242,7 +224,7 @@ class SASPTransformerModel(nn.Module):
             wpe = nn.Embedding(config.block_size, config.n_embd), # Positional embeddings
             drop = nn.Dropout(config.dropout),
             # Create a list of transformer blocks
-            h = nn.ModuleList([self.transformer_block(config) for _ in range(config.n_layer)]),
+            h = nn.ModuleList([SimplifiedTransformerBlock(config) for _ in range(config.n_layer)]),
             # Final LayerNorm
             ln_f = SASLayerNorm(config.n_embd, bias=config.bias),
         ))
@@ -252,7 +234,6 @@ class SASPTransformerModel(nn.Module):
 
         # Weight Tying: Share weights between token embeddings and final output layer
         self.transformer.wte.weight = self.lm_head.weight
-        print("Applied weight tying between input embedding (wte) and output layer (lm_head).")
 
         # Initialize weights
         self.apply(self._init_weights)
@@ -264,13 +245,7 @@ class SASPTransformerModel(nn.Module):
                 # Scale initialization variance based on depth (GPT-2 paper recommendation)
                 torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
 
-        # Ensure SASP specific initializations are called (already done in block init)
-        # for block in self.transformer.h:
-        #     if hasattr(block, 'initialize_parameters'):
-        #          block.initialize_parameters() # Should be redundant if called in block.__init__
-
-        print(f"SASPTransformerModel initialized.")
-        print(f"Number of parameters: {self.get_num_params()/1e6:.2f}M")
+        print(f"SASPTransformerModel initialized with {self.get_num_params()/1e6:.2f}M parameters")
 
 
     def get_num_params(self, non_embedding=True):
@@ -392,9 +367,3 @@ class SASPTransformerModel(nn.Module):
 
         self.train() # Set model back to training mode if needed elsewhere
         return idx # Return the generated sequence including the initial context
-
-    # Note: generate_next_token could be implemented for more fine-grained control,
-    # but a full `generate` method is often more practical for transformers.
-    # def generate_next_token(self, input_ids): # Needs careful state management (KV cache) for efficiency
-    #    pass
-

@@ -12,7 +12,7 @@ from dataclasses import dataclass # Use dataclass for config
 # --- Dataset ---
 DATASET_NAME = "wikipedia"
 DATASET_CONFIG = "20220301.simple"
-MAX_SAMPLES = 2000
+MAX_SAMPLES = 10000
 
 # --- Tokenizer ---
 TOKENIZER_NAME = "gpt2" # Uses BPE
@@ -32,16 +32,16 @@ class GPTConfig:
     use_proj: bool = False     # Use projection layer in CausalShapedAttention
     use_v: bool = False        # Use Value vector in CausalShapedAttention (QK vs QKV)
     llama_mlp: bool = False    # Use LLaMA-style MLP variant (requires specific N calc)
-    transformer_block_type: str = 'SASP' # Type of block ('SASP', 'PreLN', etc.)
+    transformer_block_type: str = 'PreLN' # Type of block ('SASP', 'PreLN', etc.)
 
 # --- Training ---
-BATCH_SIZE = 8
-NUM_EPOCHS = 2
+BATCH_SIZE = 32 
+NUM_EPOCHS = 5 
 LEARNING_RATE = 1e-4 # Adjusted LR for transformer
 # TARGET_PARAM_VALUE = 0.75 # No longer needed for transformer
 
 # --- Inference ---
-GENERATION_MAX_LEN = 30 # Increased slightly
+GENERATION_MAX_LEN = 50 # Increased slightly
 
 # --- Environment ---
 # Determine device
