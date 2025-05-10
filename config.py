@@ -81,16 +81,21 @@ else:
 CURRENT_TIME = time.strftime('%Y-%m-%d %H:%M:%S %Z')
 
 # --- Function to print config ---
-def print_config(cfg: GPTConfig = None): 
+def print_config(cfg: GPTConfig = None, dataset_name=None, dataset_config=None, max_samples=None):
     """Print the configuration settings."""
+    # Use provided values or fall back to global defaults
+    dataset_name = dataset_name or DATASET_NAME
+    dataset_config = dataset_config or DATASET_CONFIG
+    max_samples = max_samples or MAX_SAMPLES
+
     print("--- Configuration ---")
     print(f"Run Time: {CURRENT_TIME}")
     print(f"Device: {DEVICE_NAME} ({DEVICE})")
-    
+
     print("\n[Dataset]")
-    print(f"  Name: {DATASET_NAME}" + (f" ({DATASET_CONFIG})" if DATASET_CONFIG else ""))
-    print(f"  Max Samples: {MAX_SAMPLES}")
-    
+    print(f"  Name: {dataset_name}" + (f" ({dataset_config})" if dataset_config else ""))
+    print(f"  Max Samples: {max_samples}")
+
     print("\n[Tokenizer]")
     print(f"  Type: {TOKENIZER_TYPE}")
     print(f"  Parameters: {TOKENIZER_PARAMS}")
