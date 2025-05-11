@@ -1,4 +1,4 @@
-torch>=1.10 # Specify a reasonable minimum version
+torch>=2.0.0 # Specify a reasonable minimum version
 
 # Hugging Face libraries for datasets and tokenizers/transformers
 datasets>=2.0.0
