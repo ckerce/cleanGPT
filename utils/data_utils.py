@@ -12,12 +12,7 @@ from torch.utils.data import DataLoader, Dataset
 from datasets import load_dataset
 from transformers import DataCollatorForLanguageModeling
 
-from mytokenizers import BaseTokenizer
-
-
-
-
-
+from mytokenizers import BaseTokenizer # Assuming this can import your GPT2Tokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +41,16 @@ class TokenizedDataset(Dataset):
         return len(self.examples)
     
     def __getitem__(self, idx):
+        # The DataCollatorForLanguageModeling expects a list of dicts, 
+        # where each dict has 'input_ids'.
+        # Our TokenizedDataset already stores data in this format if 
+        # tokenized_data is [{ 'input_ids': [...] }, ...]
         return self.examples[idx]
 
 
 def load_and_prepare_data(dataset_name: str, 
                          dataset_config: Optional[str], 
-                         tokenizer: BaseTokenizer,
+                         tokenizer: BaseTokenizer, # This is our wrapper
                          max_samples: Optional[int] = None,
                          max_seq_length: int = 128,
                          batch_size: int = 32,
@@ -64,7 +63,7 @@ def load_and_prepare_data(dataset_name: str,
     Args:
         dataset_name: Name of the dataset (e.g., 'wikipedia', 'wikitext')
         dataset_config: Dataset configuration name
-        tokenizer: Tokenizer to use for text processing
+        tokenizer: Your BaseTokenizer wrapper instance.
         max_samples: Maximum number of samples to load
         max_seq_length: Maximum sequence length for tokenization
         batch_size: Batch size for the DataLoader
@@ -73,7 +72,7 @@ def load_and_prepare_data(dataset_name: str,
         shuffle: Whether to shuffle the data
         
     Returns:
-        Tuple of (DataLoader, tokenizer)
+        Tuple of (DataLoader, your BaseTokenizer wrapper instance)
     """
     # --- Load Dataset ---
     logger.info(f"Loading dataset: {dataset_name}" + 
@@ -91,7 +90,7 @@ def load_and_prepare_data(dataset_name: str,
             
         logger.info(f"Dataset loaded: {len(dataset)} samples")
     except Exception as e:
-        logger.error(f"Error loading dataset: {e}")
+        logger.error(f"Error loading dataset: {e}", exc_info=True)
         raise
     
     # --- Preprocess Dataset ---
@@ -99,34 +98,51 @@ def load_and_prepare_data(dataset_name: str,
     
     # Define tokenization function
     def tokenize_function(examples):
+        text_field = 'text' 
+        if 'text' not in examples and 'story' in examples:
+            text_field = 'story'
+        elif 'text' not in examples: 
+            found_field = None
+            for col_name, feat in examples.items(): 
+                if isinstance(feat, list) and feat and isinstance(feat[0], str):
+                    found_field = col_name
+                    break
+            if found_field:
+                text_field = found_field
+            else:
+                logger.warning(f"Could not auto-detect text field in examples. Using 'text'. Available keys: {list(examples.keys())}")
+
+        # Use the __call__ method of our tokenizer wrapper
         outputs = tokenizer(
-            examples["text"],
+            examples[text_field], 
             truncation=True,
             max_length=max_seq_length,
-            padding=False,
-            return_tensors=None,  # Return Python lists for datasets processing
+            padding=False, 
+            return_tensors=None, 
         )
         return outputs
     
-    # Apply tokenization to the dataset
     tokenized_dataset = dataset.map(
         tokenize_function,
         batched=True,
-        remove_columns=dataset.column_names,
+        remove_columns=dataset.column_names, 
         desc="Tokenizing dataset"
     )
     
     logger.info("Dataset tokenized.")
     
     # --- Create DataLoader ---
-    # Create data collator for batching
+    # Determine the actual tokenizer to pass to the DataCollator
+    # If our tokenizer wrapper has an underlying '_tokenizer' (like GPT2Tokenizer), use that.
+    # Otherwise, use the wrapper itself (e.g., for CharacterTokenizer).
+    tokenizer_for_collator = getattr(tokenizer, '_tokenizer', tokenizer)
+    
     data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
+        tokenizer=tokenizer_for_collator, # Pass the effective tokenizer
         mlm=mlm,
-        mlm_probability=0.15 if mlm else None,
+        mlm_probability=0.15 if mlm else 0.0,
     )
     
-    # Create DataLoader
     dataloader = DataLoader(
         tokenized_dataset,
         batch_size=batch_size,
@@ -136,11 +152,11 @@ def load_and_prepare_data(dataset_name: str,
     
     logger.info(f"DataLoader created (batch_size={batch_size}, shuffle={shuffle})")
     
-    return dataloader, tokenizer
+    return dataloader, tokenizer # Return the original wrapper
 
 
 def prepare_causal_lm_dataset(texts: List[str], 
-                             tokenizer: BaseTokenizer,
+                             tokenizer: BaseTokenizer, # This is our wrapper
                              block_size: int = 128,
                              batch_size: int = 32,
                              shuffle: bool = True) -> DataLoader:
@@ -149,7 +165,7 @@ def prepare_causal_lm_dataset(texts: List[str],
     
     Args:
         texts: List of text samples
-        tokenizer: Tokenizer to use for text processing
+        tokenizer: Your BaseTokenizer wrapper instance.
         block_size: Context window size for language modeling
         batch_size: Batch size for the DataLoader
         shuffle: Whether to shuffle the data
@@ -159,32 +175,33 @@ def prepare_causal_lm_dataset(texts: List[str],
     """
     logger.info(f"Preparing dataset from {len(texts)} text samples...")
     
-    # Tokenize all texts
     tokenized_data = []
     for text in texts:
-        # Add special tokens for proper training
-        encoded = tokenizer.encode(text, add_special_tokens=True)
+        # Encode using our tokenizer wrapper's encode method
+        encoded = tokenizer.encode(text, add_special_tokens=True) 
         
-        # Skip texts that are too short after tokenization
-        if len(encoded) < 2:  # Need at least 2 tokens for input/target
+        if len(encoded) < 2: 
             continue
             
-        # Handle texts longer than block_size
-        for i in range(0, len(encoded) - block_size + 1, block_size // 2):  # 50% overlap
-            input_ids = encoded[i:i + block_size]
-            if len(input_ids) == block_size:
-                tokenized_data.append({'input_ids': input_ids})
+        for i in range(0, len(encoded) - 1, block_size): 
+            input_ids_chunk = encoded[i : i + block_size]
+            if len(input_ids_chunk) > 1 : 
+                 tokenized_data.append({'input_ids': input_ids_chunk})
     
-    # Create a custom dataset
+    if not tokenized_data:
+        logger.warning("No suitable examples found after tokenization and chunking. DataLoader will be empty.")
+
     dataset = TokenizedDataset(tokenized_data, block_size=block_size)
     
-    # Create the DataCollator
+    # Determine the actual tokenizer to pass to the DataCollator
+    tokenizer_for_collator = getattr(tokenizer, '_tokenizer', tokenizer)
+        
     data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
-        mlm=False,  # Causal language modeling
+        tokenizer=tokenizer_for_collator, # Pass the effective tokenizer
+        mlm=False, 
+        mlm_probability=0.0 
     )
     
-    # Create and return the DataLoader
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -194,3 +211,4 @@ def prepare_causal_lm_dataset(texts: List[str],
     
     logger.info(f"DataLoader created with {len(dataset)} examples")
     return dataloader
+

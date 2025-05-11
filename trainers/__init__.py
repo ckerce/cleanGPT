@@ -7,6 +7,7 @@ creating and managing different training loop implementations (trainers)
 and their associated callbacks.
 """
 
+import torch
 import logging
 from typing import Dict, Type, Any, List, Optional # Added List and Optional
 
