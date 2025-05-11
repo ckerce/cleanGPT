@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# ./model/model_SASPV.py 
 """
 SASP Transformer Model Implementation
 Based on the Simplified Attention Sub-Block with Projections and Value options (SAS-PV)
@@ -203,7 +203,10 @@ class SimplifiedTransformerBlock(nn.Module):
         mlp_output = self.mlp(norm_x)
         # Combine using learned beta parameters - This is the SASP formulation
         # Note: This differs from standard residual connection (x = x + attn_output + mlp_output)
-        x = 0.1 * x + self.beta_SA * attn_output + self.beta_FF * mlp_output
+        #x = self.beta_SA * attn_output + self.beta_FF * mlp_output
+
+        # Implementing standard skip connection for the shaped attention for convergence excursion study
+        x = x + self.beta_SA * attn_output + self.beta_FF * mlp_output
         return x
 
 
