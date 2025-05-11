@@ -11,7 +11,7 @@ from typing import Dict, List, Union, Optional, Any
 
 # --- Dataset ---
 DATASET_NAME = "wikipedia"
-DATASET_CONFIG = "20220301.simple"
+DATASET_CONFIG = "20220301.en"
 MAX_SAMPLES = 10000
 
 # --- Tokenizer ---
@@ -47,7 +47,7 @@ class GPTConfig:
     # Training settings
     batch_size: int = 32                 # Training batch size
     num_epochs: int = 5                  # Number of training epochs
-    learning_rate: float = 1e-4          # Learning rate for optimizer
+    learning_rate: float = 0.25e-3          # Learning rate for optimizer
     weight_decay: float = 0.01           # Weight decay for regularization
     
     # Inference settings
