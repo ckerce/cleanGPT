@@ -1,5 +1,4 @@
 # ./model/model_Factored.py
-# -*- coding: utf-8 -*-
 """
 Factored Transformer model with Pre-Layer Normalization.
 This model incorporates xt and xe embedding streams, where:
