@@ -1,6 +1,6 @@
 # cleanGPT
 
-A clean, modular implementation of transformer-based language models for research and experimentation.
+A clean, modular implementation of transformer-based language models for research and experimentation. This superceeds https://github.com/ckerce/Transformer-Sandbox, but still reflects some of the spirit of https://github.com/karpathy/nanoGPT and similar repositories.  
 
 ## Project Overview
 
