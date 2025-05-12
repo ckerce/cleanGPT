@@ -15,33 +15,50 @@ The project includes implementations of multiple transformer architectures, incl
 ## Project Structure
 
 ```
-cleanGPT/
-├── main.py                      # Main entry point
-├── config.py                    # Configuration management
-├── tokenizers/                  # Tokenizer implementations
-│   ├── __init__.py              # Exports factory functions
-│   ├── base_tokenizer.py        # Abstract base class 
-│   ├── character_tokenizer.py   # Character-level tokenization
-│   ├── gpt2_tokenizer.py        # GPT-2 tokenizer wrapper
-│   └── factory.py               # Factory for creating tokenizers
-├── utils/                       # Utility functions
-│   ├── __init__.py              # Exports utilities
-│   ├── data_utils.py            # Data loading and preparation
-│   └── token_statistics.py      # Token usage analysis tools
-├── model/                       # Model definitions
-│   ├── __init__.py              # Factory for model selection
-│   ├── model_SASPV.py           # SASP implementation
-│   └── model_Vanilla.py         # Standard transformer
-├── trainers/                    # Training implementations
-│   ├── __init__.py              # Exports trainer factory
-│   ├── base_trainer.py          # Abstract base trainer
-│   └── simple_trainer.py        # Basic training loop
-├── inference/                   # Generation utilities
-│   ├── __init__.py              # Exports inference functions
-│   ├── generation.py            # Text generation functions
-│   └── sampling_strategies.py   # Different sampling approaches
-└── examples/                    # Example scripts
-    └── token_analysis.py        # Token usage analysis example
+./
+├── __init__.py
+├── config.py
+├── doc/
+│   └── README_cleanGPT_Tutorial.md
+├── examples/
+│   ├── ignore/
+│   │   └── ...
+│   ├── train_sasp_char.py
+│   └── train_{model}_{tokenizer}.py
+├── ignore/
+│   └── ...
+├── inference/
+│   ├── __init__.py
+│   ├── generation.py
+│   └── sampling_strategies.py
+├── main.py
+├── model/
+│   ├── __init__.py
+│   ├── model_SASPV.py
+│   ├── model_token_factored.py
+│   └── model_Vanilla.py
+├── mytokenizers/
+│   ├── __init__.py
+│   ├── base_tokenizer.py
+│   ├── character_tokenizer.py
+│   ├── factory.py
+│   └── gpt2_tokenizer.py
+├── output/
+│   └── info.md
+├── requirements.txt
+├── setup.py
+├── tests/
+│   ├── ...
+├── trainers/
+│   ├── __init__.py
+│   ├── base_trainer.py
+│   ├── simple_trainer.py
+│   └── train_with_callbacks.py
+└── utils/
+    ├── __init__.py
+    ├── data_utils.py
+    ├── simple_quantitative_evaluation.py
+    └── token_statistics.py
 ```
 
 ## Features
