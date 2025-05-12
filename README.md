@@ -15,7 +15,7 @@ The project includes implementations of multiple transformer architectures, incl
 ## Project Structure
 
 ```
-./
+cleanGPT
 ├── __init__.py
 ├── config.py
 ├── doc/
