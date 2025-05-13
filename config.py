@@ -6,7 +6,7 @@ Enhanced for modular tokenization and model architecture
 
 import torch
 import time
-from dataclasses import dataclass, field, fields # Added 'fields' here
+from dataclasses import dataclass, field, fields 
 from typing import Dict, List, Union, Optional, Any
 
 # --- Dataset ---
@@ -38,11 +38,15 @@ class GPTConfig:
     # Architecture selection
     model_type: str = "SASP"             # Model architecture type: "SASP", "Vanilla", "Factored", etc.
 
-    # SASP Specific Configs
-    use_proj: bool = False               # Use projection in CausalShapedAttention
-    use_v: bool = False                  # Use Value vector in CausalShapedAttention
+    # Standardized flags for all models
+    use_proj: bool = False               # Use projection in attention output
+    use_v: bool = False                  # Use separate Value vector in attention
     llama_mlp: bool = False              # Use LLaMA-style MLP
     transformer_block_type: str = 'SASP' # SASP vs PreLN block structure
+
+    # Channel factorization flags (for Factored model)
+    use_channel_factor_v: bool = False          # Use channel-factored V projection
+    use_channel_factor_proj: bool = False       # Use channel-factored output projection
 
     # Training settings
     batch_size: int = 32                 # Training batch size
@@ -58,11 +62,15 @@ class GPTConfig:
     # Extra fields for user extensions
     extra_args: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self):
+        # Ensure n_embd is divisible by n_head for all model types
+        if self.n_embd % self.n_head != 0:
+            raise ValueError(f"n_embd ({self.n_embd}) must be divisible by n_head ({self.n_head})")
+
     def update_from_tokenizer(self, tokenizer):
         """Update config based on tokenizer properties."""
         self.vocab_size = tokenizer.vocab_size
         self.padding_idx = tokenizer.pad_token_id
-        # Use tokenizer's max length if it's smaller than our block_size
         if hasattr(tokenizer, 'model_max_length') and tokenizer.model_max_length is not None and tokenizer.model_max_length < self.block_size:
             self.block_size = tokenizer.model_max_length
 
@@ -83,7 +91,6 @@ CURRENT_TIME = time.strftime('%Y-%m-%d %H:%M:%S %Z')
 # --- Function to print config ---
 def print_config(cfg: GPTConfig = None, dataset_name=None, dataset_config=None, max_samples=None):
     """Print the configuration settings."""
-    # Use provided values or fall back to global defaults
     dataset_name = dataset_name or DATASET_NAME
     dataset_config = dataset_config or DATASET_CONFIG
     max_samples = max_samples or MAX_SAMPLES
@@ -111,15 +118,18 @@ def print_config(cfg: GPTConfig = None, dataset_name=None, dataset_config=None, 
         print(f"  Dropout: {cfg.dropout}")
         print(f"  Bias: {cfg.bias}")
 
+        # Standard attention/projection settings (all models)
+        print("\n[Attention Settings]")
+        print(f"  Use Projection: {cfg.use_proj}")
+        print(f"  Use V Vector: {cfg.use_v}")
+
         if cfg.model_type == "SASP":
             print(f"  Transformer Block Type: {cfg.transformer_block_type}")
-            print(f"  SASP Use Proj: {cfg.use_proj}")
-            print(f"  SASP Use V: {cfg.use_v}")
-            print(f"  SASP LLaMA MLP: {cfg.llama_mlp}")
+            print(f"  LLaMA MLP: {cfg.llama_mlp}")
         elif cfg.model_type == "Factored":
-            # Add any Factored-specific config parameters here if you want them printed
-            pass
-
+            print("\n[Channel Factorization]")
+            print(f"  Use Channel Factor V: {cfg.use_channel_factor_v}")
+            print(f"  Use Channel Factor Proj: {cfg.use_channel_factor_proj}")
 
         print("\n[Training]")
         print(f"  Batch Size: {cfg.batch_size}")
@@ -132,7 +142,6 @@ def print_config(cfg: GPTConfig = None, dataset_name=None, dataset_config=None, 
         print(f"  Temperature: {cfg.temperature}")
         print(f"  Top-k: {cfg.top_k}")
 
-        # Print any extra arguments
         if cfg.extra_args:
             print("\n[Extra Args]")
             for k, v in cfg.extra_args.items():
@@ -144,26 +153,19 @@ def print_config(cfg: GPTConfig = None, dataset_name=None, dataset_config=None, 
 def create_config_from_args(args):
     """
     Create a config object from command line arguments.
-
     Args:
         args: Parsed command line arguments
-
     Returns:
         GPTConfig object with values from args
     """
-    # Create a base config
     config = GPTConfig()
-
-    # Update fields from args if they exist
-    # This uses dataclasses.fields to iterate over all fields defined in GPTConfig
-    for f_info in fields(GPTConfig): # Corrected: use the imported 'fields'
+    for f_info in fields(GPTConfig):
         field_name = f_info.name
         if hasattr(args, field_name):
             setattr(config, field_name, getattr(args, field_name))
 
-    # Handle special cases and derived values
-    if hasattr(args, 'device') and args.device is not None: # Check if args.device is set
-        global DEVICE, DEVICE_NAME # Allow modification of global DEVICE and DEVICE_NAME
+    if hasattr(args, 'device') and args.device is not None:
+        global DEVICE, DEVICE_NAME
         if args.device == 'cpu':
             DEVICE = torch.device('cpu')
             DEVICE_NAME = 'CPU'
@@ -173,7 +175,4 @@ def create_config_from_args(args):
         elif args.device == 'mps' and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             DEVICE = torch.device('mps')
             DEVICE_NAME = 'MPS (Apple Silicon GPU)'
-        # If args.device is something else or unavailable, DEVICE remains as auto-detected initially
-
     return config
-

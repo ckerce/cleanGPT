@@ -4,6 +4,9 @@
 Executable script for training a FactoredTransformerModel.
 This script sets up the configuration, data, model, and trainer, then runs the training.
 
+Example usage:
+
+# Basic training with default Factored model settings
 python ./trainers/train_factored_transformer.py \
   --dataset "roneneldan/TinyStories" \
   --max_samples 1000 \
@@ -16,6 +19,28 @@ python ./trainers/train_factored_transformer.py \
   --output_dir "./outputs/my_factored_model_test" \
   --tokenizer_type gpt2 \
   --device cuda  # or cpu/mps
+
+# Training with channel factorization enabled for both V and projection
+python ./trainers/train_factored_transformer.py \
+  --dataset "roneneldan/TinyStories" \
+  --use_channel_factor_v \
+  --use_channel_factor_proj \
+  --n_layer 4 \
+  --n_head 4 \
+  --n_embd 256 \
+  --output_dir "./outputs/factored_channel_model" \
+  --device cuda
+
+# Training without projection layers but with V vector
+python ./trainers/train_factored_transformer.py \
+  --dataset "roneneldan/TinyStories" \
+  --no_use_proj \
+  --use_v \
+  --n_layer 6 \
+  --n_head 6 \
+  --n_embd 384 \
+  --output_dir "./outputs/factored_no_proj_model" \
+  --device cuda
 
 """
 
@@ -63,7 +88,6 @@ def parse_args():
                         help="Path to a pretrained tokenizer directory (optional).")
 
     # Model arguments (FactoredTransformerModel specific + general)
-    # model_type will be hardcoded to "Factored" in the script but can be an arg for flexibility
     parser.add_argument("--model_type", type=str, default="Factored", choices=["Factored", "SASP", "Vanilla"],
                         help="Model architecture type.")
     parser.add_argument("--n_layer", type=int, default=6, help="Number of transformer layers.")
@@ -71,11 +95,24 @@ def parse_args():
     parser.add_argument("--n_embd", type=int, default=288, help="Embedding dimension.")
     parser.add_argument("--block_size", type=int, default=512, help="Context window size.")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout probability.")
-    parser.add_argument("--bias", action='store_true', default=True, # Factored model uses bias by default in LayerNorm
+    parser.add_argument("--bias", action='store_true', default=True,
                         help="Use bias in Linear layers and LayerNorm.")
     parser.add_argument("--no_bias", action='store_false', dest='bias',
                         help="Do not use bias.")
 
+    # Factored model specific arguments (standardized flags)
+    parser.add_argument("--use_proj", action='store_true', default=True,
+                        help="Use projection in attention output.")
+    parser.add_argument("--no_use_proj", action='store_false', dest='use_proj',
+                        help="Do not use projection in attention output.")
+    parser.add_argument("--use_v", action='store_true', default=True,
+                        help="Use separate Value vector in attention.")
+    parser.add_argument("--no_use_v", action='store_false', dest='use_v',
+                        help="Do not use separate Value vector in attention.")
+    parser.add_argument("--use_channel_factor_v", action='store_true', default=False,
+                        help="Use channel-factored V projection.")
+    parser.add_argument("--use_channel_factor_proj", action='store_true', default=False,
+                        help="Use channel-factored output projection.")
 
     # Training arguments
     parser.add_argument("--batch_size", type=int, default=16, help="Training batch size.")
@@ -86,7 +123,6 @@ def parse_args():
     parser.add_argument("--log_interval", type=int, default=50, help="Log frequency (every N batches).")
     parser.add_argument("--trainer_type", type=str, default="simple",
                         help="Type of trainer to use (default: simple).")
-
 
     # Output arguments
     parser.add_argument("--output_dir", type=str, default="./outputs/factored_transformer_model",
@@ -106,7 +142,6 @@ def parse_args():
     parser.add_argument("--temperature", type=float, default=0.8, help="Sampling temperature")
     parser.add_argument("--top_k", type=int, default=40, help="Top-k sampling parameter")
 
-
     return parser.parse_args()
 
 def main():
@@ -121,16 +156,19 @@ def main():
     logger.info("Creating model configuration...")
     # Use the create_config_from_args to populate GPTConfig from command line
     model_config = create_config_from_args(args)
-    # Override model_type to ensure we are training a Factored model
+    
+    # Override model_type and set Factored-specific configuration
     model_config.model_type = "Factored"
-
+    model_config.use_proj = args.use_proj
+    model_config.use_v = args.use_v
+    model_config.use_channel_factor_v = args.use_channel_factor_v
+    model_config.use_channel_factor_proj = args.use_channel_factor_proj
 
     # --- Determine Device (uses logic from config.py via create_config_from_args) ---
     # The global DEVICE in config.py will be updated by create_config_from_args if args.device is set.
     # We will use this global DEVICE.
     current_device = DEVICE
     logger.info(f"Using device: {current_device} (from config: {DEVICE})")
-
 
     # --- Initialize Tokenizer ---
     logger.info(f"Initializing {args.tokenizer_type} tokenizer...")
@@ -176,7 +214,6 @@ def main():
             if not isinstance(text_samples_for_vocab, list) or (text_samples_for_vocab and not isinstance(text_samples_for_vocab[0], str)):
                  text_samples_for_vocab = [str(item) for item in text_samples_for_vocab]
 
-
             char_tokenizer_instance = create_tokenizer(args.tokenizer_type, **tokenizer_params)
             char_tokenizer_instance.build_vocab_from_texts(text_samples_for_vocab)
             tokenizer = char_tokenizer_instance
@@ -188,7 +225,6 @@ def main():
 
     model_config.update_from_tokenizer(tokenizer) # Update vocab_size, padding_idx
     print_config(model_config, dataset_name=args.dataset, dataset_config=args.dataset_config, max_samples=args.max_samples)
-
 
     # --- Load and Prepare Data ---
     logger.info("Loading and preparing data...")
@@ -207,14 +243,12 @@ def main():
     )
     logger.info(f"Data loaded. DataLoader has {len(dataloader)} batches.")
 
-
     # --- Initialize Model ---
     logger.info(f"Initializing {model_config.model_type} model...")
     model = get_model(model_config.model_type, config=model_config)
     model = model.to(current_device)
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"{model_config.model_type} model initialized with {num_params/1e6:.2f}M parameters.")
-
 
     # --- Setup Optimizer ---
     logger.info("Setting up optimizer...")
@@ -266,7 +300,6 @@ def main():
         except Exception as e:
             logger.error(f"Could not save tokenizer: {e}", exc_info=True)
 
-
     # --- Generate Sample Text ---
     if not args.skip_generation:
         logger.info("Generating sample text with the trained model...")
@@ -296,7 +329,12 @@ def main():
                 with open(output_file, "w", encoding="utf-8") as f:
                     f.write(f"Run Time: {CURRENT_TIME}\n")
                     f.write(f"Model: {model_config.model_type}\n")
-                    f.write(f"Prompt: {prompt_text}\n\n")
+                    f.write(f"Prompt: {prompt_text}\n")
+                    f.write(f"Configuration:\n")
+                    f.write(f"  use_proj: {model_config.use_proj}\n")
+                    f.write(f"  use_v: {model_config.use_v}\n")
+                    f.write(f"  use_channel_factor_v: {model_config.use_channel_factor_v}\n")
+                    f.write(f"  use_channel_factor_proj: {model_config.use_channel_factor_proj}\n\n")
                     f.write(f"Generated text:\n{generated_text}\n")
             except Exception as e:
                 logger.error(f"Error generating text for prompt '{prompt_text}': {e}", exc_info=True)
@@ -305,4 +343,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
