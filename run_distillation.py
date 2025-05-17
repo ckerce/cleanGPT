@@ -1,6 +1,49 @@
 # ./run_distillation.py
 """
 Main script to run block-by-block distillation of transformer models.
+
+Examples:
+
+python run_distillation.py \
+    --teacher_model_name_or_path "gpt2" \
+    --student_model_type "Factored" \
+    --student_n_embd 768 \
+    --student_n_head 12 \
+    --dataset_name "roneneldan/TinyStories" \
+    --dataset_text_column "story" \
+    --block_size 128 \
+    --batch_size 32 \
+    --epochs_per_block 1 \
+    --lr_per_block 2.5e-4 \
+    --output_dir "./test_distilled_factored_gpt2" \
+    --max_samples 100000 \
+    --device "cuda" \
+    --use_stitching_layers \
+    --stitching_layer_bias \
+    --log_interval 10 \
+    --train_lm_head \
+    --lm_head_epochs 2 \
+    --lm_head_lr 1e-4 \
+    --lm_head_weight_decay 0.01 \
+    --logit_loss_type "kl_div" \
+    --logit_loss_temperature 2.0 \
+    --logit_loss_weight 1.0
+
+python run_distillation.py \
+  --teacher_model_name_or_path="gpt2" \
+  --student_model_type="Factored" \
+  --student_n_embd=768 \
+  --student_n_head=12 \
+  --epochs_per_block=1 \
+  --train_lm_head \
+  --lm_head_epochs=5 \
+  --lm_head_lr=1e-4 \
+  --logit_loss_type="kl_div" \
+  --logit_loss_temperature=2.0 \
+  --dataset_name="wikitext" \
+  --dataset_config_name="wikitext-2-raw-v1" \
+  --output_dir="./distilled_factored_model"
+
 """
 import argparse
 import logging
@@ -177,6 +220,26 @@ def parse_args():
     parser.add_argument("--no_freeze_previous_blocks", action="store_false", dest="freeze_previous_blocks",
                         help="Do not freeze previously distilled blocks.")
 
+    # --- LM Head Training Arguments ---
+    parser.add_argument("--train_lm_head", action="store_true", default=True,
+                        help="Perform a final phase to specifically train the language model head.")
+    parser.add_argument("--no_train_lm_head", action="store_false", dest="train_lm_head",
+                        help="Skip the language model head training phase.")
+    parser.add_argument("--lm_head_epochs", type=int, default=3,
+                        help="Number of epochs for LM head training.")
+    parser.add_argument("--lm_head_lr", type=float, default=5e-5,
+                        help="Learning rate for LM head training.")
+    parser.add_argument("--lm_head_weight_decay", type=float, default=0.01,
+                        help="Weight decay for LM head training.")
+    parser.add_argument("--lm_head_max_grad_norm", type=float, default=1.0,
+                        help="Max gradient norm for LM head training.")
+    parser.add_argument("--logit_loss_type", type=str, default="kl_div", choices=["mse", "kl_div", "ce"],
+                        help="Type of loss function for logit distillation (LM head training).")
+    parser.add_argument("--logit_loss_temperature", type=float, default=2.0,
+                        help="Temperature for logit distillation (for KL divergence loss).")
+    parser.add_argument("--logit_loss_weight", type=float, default=1.0,
+                        help="Weight of the logit distillation loss relative to the hidden states loss.")
+
     # --- Stitching Layer Arguments ---
     parser.add_argument("--use_stitching_layers", action="store_true", default=True,
                         help="Use trainable linear stitching layers. Default is True if not specified otherwise.")
@@ -204,7 +267,7 @@ def main():
         logger.info(f"Using device specified via CLI: {current_device}")
     else: # Use DEVICE from config_distillation.py (which auto-detects)
         current_device = DEVICE 
-        logger.info(f"Using device from config_distillation.py: {current_device} ({DEVICE_NAME})")
+        logger.info(f"Using device from config_distillation.py: {current_device}")
 
 
     # --- Load Teacher Model and Tokenizer ---
@@ -334,6 +397,9 @@ def main():
             train_dataloader=train_dataloader,
             distill_loss_type=args.distill_loss_type,
             distill_loss_temperature=args.distill_loss_temperature,
+            logit_loss_type=args.logit_loss_type,
+            logit_loss_temperature=args.logit_loss_temperature,
+            logit_loss_weight=args.logit_loss_weight,
             use_stitching_layers=args.use_stitching_layers,      
             stitching_layer_bias=args.stitching_layer_bias,    
             optimizer_cls=torch.optim.AdamW, # Optimizer class
@@ -353,7 +419,12 @@ def main():
             epochs_per_block=args.epochs_per_block,
             lr_per_block=args.lr_per_block, # This is a float from argparse
             wd_per_block=args.weight_decay_per_block, # This is a float
-            max_grad_norm_per_block=args.max_grad_norm_per_block # This is a float
+            max_grad_norm_per_block=args.max_grad_norm_per_block, # This is a float
+            train_lm_head=args.train_lm_head,
+            lm_head_epochs=args.lm_head_epochs,
+            lm_head_lr=args.lm_head_lr,
+            lm_head_wd=args.lm_head_weight_decay,
+            lm_head_max_grad_norm=args.lm_head_max_grad_norm
         )
     except Exception as e:
         logger.error(f"An error occurred during distillation training: {e}", exc_info=True)
@@ -367,4 +438,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
