@@ -546,12 +546,15 @@ plt.savefig(f"hidden_states_block_{block_idx}_epoch_{epoch}.png")
 
 This tutorial covered the essential components and usage of the distillation framework in cleanGPT. The modular design allows for flexible experimentation with different model architectures, loss functions, and training strategies.
 
-Key takeaways:
+Hypotheses under investigation:
 
 1. Block-by-block distillation enables effective knowledge transfer
-2. Stitching layers bridge dimension differences between teacher and student
+2. Stitching layers provide effictive mechanisms to bridge dimension differences between teacher and student
 3. Separate LM head training improves final model quality
-4. The framework supports various student architectures and loss functions
-5. Evaluation tools help assess distillation effectiveness
+
+
+Key properties of the implementation:
+1. The framework supports various student architectures and loss functions
+2. Evaluation tools are being developed to assess distillation effectiveness
 
 By following this guide, you should be able to distill your own models and extend the framework for your specific research needs.
