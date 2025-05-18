@@ -25,7 +25,7 @@ python run_distillation.py \
     --lm_head_epochs 2 \
     --lm_head_lr 1e-4 \
     --lm_head_weight_decay 0.01 \
-    --logit_loss_type "kl_div" \
+    --logit_loss_type "mse" \
     --logit_loss_temperature 2.0 \
     --logit_loss_weight 1.0
 
@@ -74,16 +74,17 @@ try:
     from model.model_token_factored_distillation import FactoredTransformerModelDistillation
     from model.model_SASPV_distillation import SASPTransformerModelDistillation
     from model.model_vanilla_distillation import VanillaTransformerModelDistillation
-    from distillation_module import BlockDistillationTrainer
+    from distillation_module import BlockDistillationTrainer # This should now import correctly
 except ImportError as e:
     print(f"Initial error importing custom modules: {e}")
     print("Please ensure 'config_distillation.py' and model definitions (e.g., in a 'model' folder) "
-          "are in the Python path or structured correctly relative to this script's parent directory.")
+          "are in the Python path or structured correctly relative to this script's parent directory, "
+          "and that distillation_module and its dependencies are accessible.")
     # Exit if critical modules are missing, as the script cannot function.
     sys.exit(1)
 
 
-from transformers import GPT2Model, GPT2Config as HF_GPT2Config, AutoTokenizer
+from transformers import GPT2LMHeadModel, GPT2Config as HF_GPT2Config, AutoTokenizer # Changed GPT2Model to GPT2LMHeadModel
 from torch.utils.data import DataLoader, Dataset
 from datasets import load_dataset
 
@@ -275,7 +276,8 @@ def main():
     try:
         teacher_tokenizer = AutoTokenizer.from_pretrained(args.teacher_model_name_or_path, use_fast=True)
         teacher_hf_config = HF_GPT2Config.from_pretrained(args.teacher_model_name_or_path)
-        teacher_model = GPT2Model.from_pretrained(args.teacher_model_name_or_path, config=teacher_hf_config)
+        # *** CHANGED HERE: Use GPT2LMHeadModel instead of GPT2Model ***
+        teacher_model = GPT2LMHeadModel.from_pretrained(args.teacher_model_name_or_path, config=teacher_hf_config)
         teacher_model.eval().to(current_device) # Ensure teacher is in eval mode and on correct device
     except Exception as e:
         logger.error(f"Failed to load teacher model or tokenizer ('{args.teacher_model_name_or_path}'): {e}", exc_info=True)
@@ -438,3 +440,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
