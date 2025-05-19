@@ -17,6 +17,21 @@ python ./trainers/train_factored_transformer.py \
   --tokenizer_type gpt2 \
   --device cuda  # or cpu/mps
 
+
+python ./trainers/train_factored_transformer.py \
+  --dataset "wikitext" \
+  --dataset_config "wikitext-2-raw-v1" \
+  --n_layer 4 \
+  --n_head 4 \
+  --n_embd 256 \
+  --block_size 128 \
+  --batch_size 16 \
+  --num_epochs 10  # You'll likely want more epochs for WikiText-2 \
+  --output_dir "./outputs/wikitext2_factored_model" \
+  --tokenizer_type gpt2 \
+  --device cuda
+  --max_samples 103000000 
+
 """
 
 import argparse

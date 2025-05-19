@@ -7,11 +7,13 @@ Imports model architectures for easy access.
 # Import model implementations for easier access
 from .model_SASPV import SASPTransformerModel
 from .model_Vanilla import VanillaTransformerModel
+from .model_token_factored import FactoredTransformerModel # Import the new model
 
 # Dictionary mapping architecture names to model classes
 MODEL_REGISTRY = {
     "SASP": SASPTransformerModel,
     "Vanilla": VanillaTransformerModel,
+    "Factored": FactoredTransformerModel,  # Add the new model to the registry
 }
 
 def get_model(model_type, config):
@@ -19,7 +21,7 @@ def get_model(model_type, config):
     Factory function to get the appropriate model class.
     
     Args:
-        model_type (str): The type of model to use (e.g., 'SASP', 'Vanilla')
+        model_type (str): The type of model to use (e.g., 'SASP', 'Vanilla', 'Factored')
         config: Configuration object for the model
         
     Returns:
