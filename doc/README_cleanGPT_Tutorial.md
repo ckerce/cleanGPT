@@ -20,14 +20,14 @@ This tutorial provides a comprehensive overview of the cleanGPT framework, expla
 
 ## Overview and Philosophy
 
-cleanGPT is designed around the principle of separation of concerns, enabling researchers to focus on experimenting with specific aspects of the language model pipeline without needing to reimplement the entire system. The architecture follows a modular design where components have well-defined interfaces and can be swapped or extended easily.
+cleanGPT is designed around the principle of separation of concerns, enabling a focus on experimentation with specific aspects of the language model pipeline without needing to reimplement the entire system. The architecture follows a modular design where components have well-defined interfaces and can be swapped or extended (... easily).
 
 Key design philosophies:
 
 - **Modularity**: Components are interchangeable through consistent interfaces
 - **Readability**: Code prioritizes clarity and maintainability
 - **Extensibility**: Easy to add new variants without altering existing code
-- **Configurability**: Extensive configuration options without code changes
+- **Configurability**: Extensive configuration options without code changes provides a way to track experiments
 - **Single Responsibility**: Each component handles one aspect of the system
 
 ## Core Components
