@@ -8,6 +8,18 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+#class LayerNorm(nn.Module):
+#    """LayerNorm with optional bias."""
+#    def __init__(self, ndim, bias=True):
+#        super().__init__()
+#        self.weight = nn.Parameter(torch.ones(ndim))
+#        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None
+#
+#    def forward(self, input):
+#        orig_dtype = input.dtype
+#        input_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float32
+#        return F.layer_norm(input.to(input_dtype), self.weight.shape, self.weight, self.bias, 1e-5).to(orig_dtype)
+
 class LayerNorm(nn.Module):
     """LayerNorm with optional bias."""
     def __init__(self, ndim, bias=True):
@@ -16,9 +28,8 @@ class LayerNorm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None
 
     def forward(self, input):
-        orig_dtype = input.dtype
-        input_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float32
-        return F.layer_norm(input.to(input_dtype), self.weight.shape, self.weight, self.bias, 1e-5).to(orig_dtype)
+        # Simplify the implementation to avoid dtype issues
+        return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
 
 class CausalSelfAttention(nn.Module):
