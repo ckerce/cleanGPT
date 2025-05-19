@@ -11,24 +11,23 @@ python -m examples.run_distillation_example \
     --dataset_name "roneneldan/TinyStories" \
     --dataset_text_column "story" \
     --block_size 128 \
-    --batch_size 50 \
-    --epochs_per_block 3 \
-    --lr_per_block 1e-3 \
+    --batch_size 32 \
+    --epochs_per_block 8 \
+    --lr_per_block 5e-4 \
     --output_dir "./test_distilled_factored_gpt2" \
-    --max_samples 1000 \
     --device "cuda" \
     --use_stitching_layers \
     --stitching_layer_bias \
     --log_interval 100 \
     --train_lm_head \
-    --lm_head_epochs 3 \
+    --lm_head_epochs 10 \
     --lm_head_lr 1e-4 \
     --lm_head_weight_decay 0.01 \
     --logit_loss_type "kl_div" \
     --logit_loss_temperature 2.0 \
     --logit_loss_weight 1.0 \
-    --no_freeze_previous_blocks \
     --initialize_head_from_teacher
+    --max_samples 100000 \
 
 """
 import argparse
@@ -171,7 +170,7 @@ def parse_args():
                        help="Configuration name for the dataset (e.g., 'wikitext-2-raw-v1'). If None, uses dataset default.")
    parser.add_argument("--dataset_text_column", type=str, default="text",
                        help="The name of the column in the dataset that contains the text.")
-   parser.add_argument("--max_samples", type=int, default=10000,
+   parser.add_argument("--max_samples", type=int, default=100000,
                        help="Maximum number of samples to use from the dataset for training. 0 for all.")
    parser.add_argument("--block_size", type=int, default=128,
                        help="Block size for tokenization and model context window.")
