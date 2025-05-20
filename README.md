@@ -225,8 +225,8 @@ python -m distillation.evaluation.evaluate_distilled_model \
     --model_path "./distilled_model_output/student_model_final_distilled.pt" \
     --model_type "Factored" \
     --teacher_model_name "gpt2" \
-    --dataset_name "wikitext" \
-    --dataset_config_name "wikitext-2-raw-v1" \
+    --dataset "wikimedia/wikipedia" \
+    --dataset_config "20231101.en" \
     --generate_comparisons
 ```
 
