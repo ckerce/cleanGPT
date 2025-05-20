@@ -18,16 +18,16 @@ python ./trainers/train_factored_transformer.py \
   --device cuda  # or cpu/mps
 
 
-python ./trainers/train_factored_transformer.py \
-  --dataset "wikitext" \
-  --dataset_config "wikitext-2-raw-v1" \
-  --n_layer 4 \
-  --n_head 4 \
-  --n_embd 256 \
-  --block_size 128 \
-  --batch_size 16 \
-  --num_epochs 10  \
-  --output_dir "./output/wikitext2_factored_model" \
+python examples/train_factored_transformer.py \
+  --dataset "wikimedia/wikipedia" \
+  --dataset_config "20231101.en" \
+  --n_layer 8 \
+  --n_head 8 \
+  --n_embd 768 \
+  --block_size 512 \
+  --batch_size 32 \
+  --num_epochs 2  \
+  --output_dir "./output/wikipedia_factored_model" \
   --tokenizer_type gpt2 \
   --device cuda \
   --max_samples 103000000 
