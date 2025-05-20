@@ -85,7 +85,7 @@ cleanGPT
 - **Multiple Tokenization Strategies**: Character-level, GPT-2, with consistent interface
 - **Flexible Model Architectures**: 
   - Vanilla Transformer with Pre-LayerNorm as a baseline architecture
-  - SASP Transformer[https://github.com/ckerce/Transformer-Sandbox/blob/master/docs/simplified-transformers_README.md] (Simplified Attention Sub-Block with Projections) to examine alternative paths for information flow
+  - [SASP Transformer](https://github.com/ckerce/Transformer-Sandbox/blob/master/docs/simplified-transformers_README.md) (Simplified Attention Sub-Block with Projections) to examine alternative paths for information flow
   - Token-Factored Transformer -- in progress
 - **Model Distillation**: Block-by-block distillation with stitching layers for efficient knowledge transfer
 - **Extensible Training**: Modular training loop with customizable strategies
