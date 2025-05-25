@@ -38,19 +38,32 @@ class LayerNorm(nn.Module):
 class FactoredCausalSelfAttentionALiBi(nn.Module):
     """
     Causal self-attention mechanism for the Factored Transformer with ALiBi positional encoding.
-    CORRECTED: Uses only Q and K projections, with xt directly as values.
+    CORRECTED: Uses only Q and K projections, with xt directly as values (unless use_v=True).
     """
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
 
-        # CORRECTED: Only Key and Query projections (no V or output projection)
+        # Always have Key and Query projections
         self.c_attn = nn.Linear(config.n_embd, 2 * config.n_embd, bias=config.bias)
-        # NO c_proj - would distort xt symbolic structure
+        
+        # Store config for conditional behavior
+        self.use_v = getattr(config, 'use_v', False)
+        self.use_proj = getattr(config, 'use_proj', False)
+        
+        # Conditional V and output projection matrices
+        if self.use_v:
+            # Create n_heads x n_heads trainable parameters for V
+            self.v_tmp = nn.Parameter(torch.randn(config.n_head, config.n_head) * 0.02)
+            
+        if self.use_proj:
+            # Create n_heads x n_heads trainable parameters for output projection
+            self.proj_tmp = nn.Parameter(torch.randn(config.n_head, config.n_head) * 0.02)
 
         # Regularization
         self.attn_dropout = nn.Dropout(config.dropout)
-        # No resid_dropout since no c_proj
+        if self.use_proj:
+            self.resid_dropout = nn.Dropout(config.dropout)
 
         self.n_head = config.n_head
         self.n_embd = config.n_embd
@@ -59,6 +72,32 @@ class FactoredCausalSelfAttentionALiBi(nn.Module):
         # ALiBi slopes - computed once and cached
         slopes = self._get_alibi_slopes(config.n_head)
         self.register_buffer("alibi_slopes", slopes, persistent=False)
+
+    def _get_kronecker_lifted_tensor(self, v):
+        '''
+        v should have dimensions n_heads x n_heads (number of heads by number of heads)
+        v_out will be lifted to n_embd x n_embd
+
+        If v_in is a matrix {v_in_ij}, then
+        v_out_ij = v_in_ij * eye(n_embd // n_heads)
+        
+        This creates a block-diagonal structure where each n_heads x n_heads block
+        is scaled by the corresponding element in v.
+        '''
+        n_heads = v.shape[0]
+        head_dim = self.n_embd // n_heads
+        
+        # Create the lifted tensor
+        v_out = torch.zeros(self.n_embd, self.n_embd, device=v.device, dtype=v.dtype)
+        
+        for i in range(n_heads):
+            for j in range(n_heads):
+                # Create identity matrix scaled by v[i,j]
+                start_i, end_i = i * head_dim, (i + 1) * head_dim
+                start_j, end_j = j * head_dim, (j + 1) * head_dim
+                v_out[start_i:end_i, start_j:end_j] = v[i, j] * torch.eye(head_dim, device=v.device, dtype=v.dtype)
+        
+        return v_out
 
     def _get_alibi_slopes(self, n_heads):
         """
@@ -124,19 +163,30 @@ class FactoredCausalSelfAttentionALiBi(nn.Module):
     def forward(self, x_norm_for_qk, xt_current_for_v):
         """
         Forward pass for FactoredCausalSelfAttentionALiBi.
-        CORRECTED: x_norm_for_qk used for Q,K; xt_current_for_v used directly as values.
+        x_norm_for_qk used for Q,K; xt_current_for_v used directly as values (or projected if use_v=True).
         """
         B, T, C = x_norm_for_qk.size()
 
-        # CORRECTED: Calculate only query and key from normalized combined state
+        # Calculate only query and key from normalized combined state
         q, k = self.c_attn(x_norm_for_qk).split(self.n_embd, dim=2)
 
         # Reshape for multi-head attention
         q = q.view(B, T, self.n_head, self.head_dim).transpose(1, 2)  # (B, nh, T, hs)
         k = k.view(B, T, self.n_head, self.head_dim).transpose(1, 2)  # (B, nh, T, hs)
 
-        # CORRECTED: Use xt directly as values (no projection, no modulation)
-        v = xt_current_for_v.view(B, T, self.n_head, self.head_dim).transpose(1, 2)  # (B, nh, T, hs)
+        # Handle values based on use_v flag
+        if self.use_v:
+            # Apply Kronecker-lifted V matrix to xt
+            v_matrix = self._get_kronecker_lifted_tensor(self.v_tmp)
+            # Reshape xt_current_for_v for matrix multiplication: (B*T, C)
+            xt_flat = xt_current_for_v.view(-1, C)
+            # Apply V matrix: (B*T, C) @ (C, C) -> (B*T, C)
+            v_flat = torch.matmul(xt_flat, v_matrix.t())
+            # Reshape back and prepare for multi-head attention
+            v = v_flat.view(B, T, self.n_head, self.head_dim).transpose(1, 2)  # (B, nh, T, hs)
+        else:
+            # Use xt directly as values (no projection, no modulation)
+            v = xt_current_for_v.view(B, T, self.n_head, self.head_dim).transpose(1, 2)  # (B, nh, T, hs)
 
         # Compute attention scores with proper scaling
         scale = 1.0 / math.sqrt(self.head_dim)
@@ -151,11 +201,24 @@ class FactoredCausalSelfAttentionALiBi(nn.Module):
         att_weights = F.softmax(att_scores, dim=-1)
         att_weights = self.attn_dropout(att_weights)
 
-        # Apply attention to values (which are just xt)
+        # Apply attention to values
         y = att_weights @ v  # (B, nh, T, hs)
 
-        # Concatenate heads - this is the final output (no projection)
+        # Concatenate heads
         y = y.transpose(1, 2).contiguous().view(B, T, C)
+        
+        # Apply output projection if enabled
+        if self.use_proj:
+            proj_matrix = self._get_kronecker_lifted_tensor(self.proj_tmp)
+            # Reshape for matrix multiplication: (B*T, C)
+            y_flat = y.view(-1, C)
+            # Apply projection: (B*T, C) @ (C, C) -> (B*T, C)
+            y_flat = torch.matmul(y_flat, proj_matrix.t())
+            # Reshape back
+            y = y_flat.view(B, T, C)
+            # Apply residual dropout
+            y = self.resid_dropout(y)
+        
         return y
 
 
@@ -214,6 +277,10 @@ class FactoredTransformerModelALiBi(nn.Module):
         
         self.config = config
         self.padding_idx = getattr(config, 'padding_idx', None)
+        
+        # Store use_v flag for proper initialization
+        self.use_v = getattr(config, 'use_v', False)
+        self.use_proj = getattr(config, 'use_proj', False)
 
         # Model components (no positional embeddings with ALiBi)
         self.transformer = nn.ModuleDict(dict(
@@ -230,12 +297,13 @@ class FactoredTransformerModelALiBi(nn.Module):
         # Initialize weights
         self.apply(self._init_weights)
 
-        # Special initialization for output projections
+        # Special initialization for output projections and factored attention
         for pn, p in self.named_parameters():
             if pn.endswith('c_proj.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 
         print(f"FactoredTransformerModelALiBi initialized with {self.get_num_params()/1e6:.2f}M parameters")
+        print(f"Using factored attention with use_v={self.use_v}, use_proj={self.use_proj}")
 
     def get_num_params(self, non_embedding=True):
         """Return the number of parameters in the model."""
@@ -253,6 +321,14 @@ class FactoredTransformerModelALiBi(nn.Module):
             if module.padding_idx is not None:
                 with torch.no_grad():
                     module.weight[module.padding_idx].fill_(0)
+        elif isinstance(module, FactoredCausalSelfAttentionALiBi):
+            # Initialize the factored attention parameters
+            if hasattr(module, 'v_tmp'):
+                # Initialize V matrix parameters
+                torch.nn.init.normal_(module.v_tmp, mean=0.0, std=0.02)
+            if hasattr(module, 'proj_tmp'):
+                # Initialize output projection parameters  
+                torch.nn.init.normal_(module.proj_tmp, mean=0.0, std=0.02/math.sqrt(2 * self.config.n_layer))
 
     def forward(self, input_ids, attention_mask=None, labels=None):
         """Forward pass for the FactoredTransformerModelALiBi."""
