@@ -4,7 +4,6 @@ Factored Transformer model with Pre-Layer Normalization.
 This model incorporates xt and xe embedding streams, where:
 - xt is primarily updated by the attention mechanism and represents token-like symbolic states.
 - xe is primarily updated by the MLP and represents embedding-like contextual states.
-CORRECTED: Attention uses only Q,K projections from norm(xt+xe), with xt directly as values.
 """
 
 import math
@@ -42,14 +41,12 @@ class LayerNorm(nn.Module):
 class FactoredCausalSelfAttention(nn.Module):
     """
     Causal self-attention mechanism for the Factored Transformer.
-    CORRECTED: Q and K are derived from norm(xt + xe), but V is xt directly.
     This preserves the symbolic structure while allowing contextual attention patterns.
     """
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
         
-        # CORRECTED: Only Key and Query projections (no V or output projection)
         self.c_attn = nn.Linear(config.n_embd, 2 * config.n_embd, bias=config.bias)
         # NO c_proj - would distort xt symbolic structure
         
@@ -69,7 +66,6 @@ class FactoredCausalSelfAttention(nn.Module):
     def forward(self, x_norm_for_qk, xt_current_for_v):
         """
         Forward pass for FactoredCausalSelfAttention.
-        CORRECTED: Uses x_norm_for_qk for Q,K computation, xt_current_for_v directly as values.
         Args:
             x_norm_for_qk (torch.Tensor): Normalized (xt + xe) used for Q and K computation.
             xt_current_for_v (torch.Tensor): The current xt stream, used directly as values.
@@ -78,14 +74,12 @@ class FactoredCausalSelfAttention(nn.Module):
         """
         B, T, C = x_norm_for_qk.size()
         
-        # CORRECTED: Calculate only query and key from normalized combined state
         q, k = self.c_attn(x_norm_for_qk).split(self.n_embd, dim=2)
 
         # Reshape Q and K for multi-head attention
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
-        # CORRECTED: Use xt directly as values (no projection, no modulation)
         v = xt_current_for_v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
         # Scaled dot-product attention
@@ -156,7 +150,6 @@ class FactoredPreLNBlock(nn.Module):
             Tuple[torch.Tensor, torch.Tensor]: The updated xt and xe streams.
         """
         # Attention Path
-        # CORRECTED: Use combined state for Q,K computation, xt directly for values
         norm_for_attn_qk = self.ln_1(xt + xe)
         attn_output = self.attn(x_norm_for_qk=norm_for_attn_qk, xt_current_for_v=xt)
         xt = xt + attn_output
@@ -174,7 +167,6 @@ class FactoredPreLNBlock(nn.Module):
 class FactoredTransformerModel(nn.Module):
     """
     Factored Transformer model using Pre-Layer Normalization and xt/xe streams.
-    CORRECTED version with proper symbolic structure preservation.
     """
     def __init__(self, config):
         super().__init__()
