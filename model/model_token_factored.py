@@ -1,9 +1,10 @@
-# ./model/model_Factored.py
+# ./model/model_token_factored.py
 """
 Factored Transformer model with Pre-Layer Normalization.
 This model incorporates xt and xe embedding streams, where:
-- xt is primarily updated by the attention mechanism.
-- xe is primarily updated by the MLP.
+- xt is primarily updated by the attention mechanism and represents token-like symbolic states.
+- xe is primarily updated by the MLP and represents embedding-like contextual states.
+CORRECTED: Attention uses only Q,K projections from norm(xt+xe), with xt directly as values.
 """
 
 import math
@@ -41,26 +42,23 @@ class LayerNorm(nn.Module):
 class FactoredCausalSelfAttention(nn.Module):
     """
     Causal self-attention mechanism for the Factored Transformer.
-    - Q and K are derived from norm(xt + xe).
-    - V is effectively xt_current * V_derived_from_norm(xt+xe).
-    The output of this block updates xt.
+    CORRECTED: Q and K are derived from norm(xt + xe), but V is xt directly.
+    This preserves the symbolic structure while allowing contextual attention patterns.
     """
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
         
-        # Key, Query, Value projections from the combined normalized input
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
-        # Output projection
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
+        # CORRECTED: Only Key and Query projections (no V or output projection)
+        self.c_attn = nn.Linear(config.n_embd, 2 * config.n_embd, bias=config.bias)
+        # NO c_proj - would distort xt symbolic structure
         
         # Regularization
         self.attn_dropout = nn.Dropout(config.dropout)
-        self.resid_dropout = nn.Dropout(config.dropout) # Dropout on the output of the projection
+        # No resid_dropout since no c_proj
         
         self.n_head = config.n_head
         self.n_embd = config.n_embd
-        # self.dropout = config.dropout # Stored for reference, used in self.attn_dropout
 
         # Causal mask to ensure attention is only to the left
         self.register_buffer(
@@ -68,29 +66,27 @@ class FactoredCausalSelfAttention(nn.Module):
             torch.tril(torch.ones(config.block_size, config.block_size)).view(1, 1, config.block_size, config.block_size)
         )
 
-    def forward(self, x_norm_for_qkv, xt_current_for_v):
+    def forward(self, x_norm_for_qk, xt_current_for_v):
         """
         Forward pass for FactoredCausalSelfAttention.
+        CORRECTED: Uses x_norm_for_qk for Q,K computation, xt_current_for_v directly as values.
         Args:
-            x_norm_for_qkv (torch.Tensor): Normalized (xt + xe) used for Q, K, and initial V.
-            xt_current_for_v (torch.Tensor): The current xt stream, used to modulate V.
+            x_norm_for_qk (torch.Tensor): Normalized (xt + xe) used for Q and K computation.
+            xt_current_for_v (torch.Tensor): The current xt stream, used directly as values.
         Returns:
             torch.Tensor: The output of the attention mechanism, to be added to xt.
         """
-        B, T, C = x_norm_for_qkv.size() # batch size, sequence length, embedding dimensionality (n_embd)
+        B, T, C = x_norm_for_qk.size()
         
-        # Calculate query, key, and an initial value (v_orig) from x_norm_for_qkv
-        q, k, v_orig = self.c_attn(x_norm_for_qkv).split(self.n_embd, dim=2)
+        # CORRECTED: Calculate only query and key from normalized combined state
+        q, k = self.c_attn(x_norm_for_qk).split(self.n_embd, dim=2)
 
-        # Reshape Q, K, V_orig for multi-head attention
+        # Reshape Q and K for multi-head attention
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v_orig = v_orig.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
-        # Modulate v_orig using xt_current_for_v to get the effective V
-        # Reshape xt_current_for_v to match v_orig's shape for element-wise multiplication
-        xt_reshaped_for_v = xt_current_for_v.view(B, T, self.n_head, C // self.n_head).transpose(1,2) # (B, nh, T, hs)
-        effective_v = xt_reshaped_for_v * v_orig # Element-wise multiplication
+        # CORRECTED: Use xt directly as values (no projection, no modulation)
+        v = xt_current_for_v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
         # Scaled dot-product attention
         att_scores = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
@@ -102,14 +98,11 @@ class FactoredCausalSelfAttention(nn.Module):
         att_weights = F.softmax(att_scores, dim=-1)
         att_weights = self.attn_dropout(att_weights)
         
-        # Apply attention to the effective_v
-        y = att_weights @ effective_v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        # Apply attention to the values (which are just xt)
+        y = att_weights @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         
-        # Re-assemble all head outputs
-        y = y.transpose(1, 2).contiguous().view(B, T, C) # (B, T, C)
-        
-        # Output projection and dropout
-        y = self.resid_dropout(self.c_proj(y))
+        # Re-assemble all head outputs - this is the final output (no projection)
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
         return y
 
 
@@ -124,7 +117,7 @@ class FactoredMLP(nn.Module):
         self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
         self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
-        self.activation = nn.GELU() # Standard GELU activation
+        self.activation = nn.GELU()
 
     def forward(self, x_norm):
         """
@@ -163,28 +156,17 @@ class FactoredPreLNBlock(nn.Module):
             Tuple[torch.Tensor, torch.Tensor]: The updated xt and xe streams.
         """
         # Attention Path
-        # Input to attention's QKV derivation is norm(xt + xe)
-        # The V used in attention is modulated by the original xt passed to this block.
-        # Attention output updates only xt.
-        norm_for_attn_qkv = self.ln_1(xt + xe)
-        attn_output = self.attn(x_norm_for_qkv=norm_for_attn_qkv, xt_current_for_v=xt)
-        xt = xt + attn_output  # xe remains unchanged by the attention output itself
+        # CORRECTED: Use combined state for Q,K computation, xt directly for values
+        norm_for_attn_qk = self.ln_1(xt + xe)
+        attn_output = self.attn(x_norm_for_qk=norm_for_attn_qk, xt_current_for_v=xt)
+        xt = xt + attn_output
 
         # MLP Path
         # Input to MLP is norm(xt_updated_by_attention + xe_original_passed_to_block)
         # MLP output updates only xe.
         norm_for_mlp = self.ln_2(xt + xe) # Note: xt here is the one updated by attention
         mlp_output = self.mlp(norm_for_mlp)
-        xe = xe + mlp_output  # xt remains unchanged by the MLP output itself
-        
-        # NOTE for future consideration on normalization:
-        # To potentially improve training stability, one might consider normalizing
-        # xt and xe *after* their respective updates within this block, e.g.:
-        # xt_new = self.ln_xt_out(xt + attn_output)
-        # xe_new = self.ln_xe_out(xe + mlp_output)
-        # This would require additional LayerNorm modules (e.g., self.ln_xt_out, self.ln_xe_out)
-        # and careful consideration of where those norms are placed relative to the residual.
-        # For now, adhering to the simpler residual addition before any such output normalization.
+        xe = xe + mlp_output
 
         return xt, xe
 
@@ -192,21 +174,22 @@ class FactoredPreLNBlock(nn.Module):
 class FactoredTransformerModel(nn.Module):
     """
     Factored Transformer model using Pre-Layer Normalization and xt/xe streams.
+    CORRECTED version with proper symbolic structure preservation.
     """
     def __init__(self, config):
         super().__init__()
         assert config.vocab_size is not None, "vocab_size must be specified in config"
         assert config.block_size is not None, "block_size must be specified in config"
         self.config = config
-        self.padding_idx = getattr(config, 'padding_idx', None) # For embedding layer
+        self.padding_idx = getattr(config, 'padding_idx', None)
 
         # Model components dictionary
         self.transformer = nn.ModuleDict(dict(
-            wte = nn.Embedding(config.vocab_size, config.n_embd, padding_idx=self.padding_idx), # Token embeddings
-            wpe = nn.Embedding(config.block_size, config.n_embd), # Positional embeddings
-            drop = nn.Dropout(config.dropout), # Dropout for the sum of token and positional embeddings
-            h = nn.ModuleList([FactoredPreLNBlock(config) for _ in range(config.n_layer)]), # Stack of FactoredPreLNBlocks
-            ln_f = LayerNorm(config.n_embd, bias=config.bias), # Final layer norm before output head
+            wte = nn.Embedding(config.vocab_size, config.n_embd, padding_idx=self.padding_idx),
+            wpe = nn.Embedding(config.block_size, config.n_embd),
+            drop = nn.Dropout(config.dropout),
+            h = nn.ModuleList([FactoredPreLNBlock(config) for _ in range(config.n_layer)]),
+            ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
 
         # Language model head
@@ -218,10 +201,9 @@ class FactoredTransformerModel(nn.Module):
         # Initialize weights
         self.apply(self._init_weights)
         
-        # Apply special scaled initialization to the output projection layers in Attention and MLP
-        # This is a common practice from GPT-2 to help with training stability.
+        # Apply special scaled initialization to the output projection layers
         for pn, p in self.named_parameters():
-            if pn.endswith('c_proj.weight'): # Targets output projections in FactoredCausalSelfAttention and FactoredMLP
+            if pn.endswith('c_proj.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
 
         print(f"FactoredTransformerModel initialized with {self.get_num_params()/1e6:.2f}M parameters")
@@ -230,7 +212,6 @@ class FactoredTransformerModel(nn.Module):
         """
         Return the number of parameters in the model.
         If non_embedding is True, subtracts parameters of positional embeddings.
-        Token embeddings are tied to lm_head, so they are counted.
         """
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
@@ -246,115 +227,95 @@ class FactoredTransformerModel(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.padding_idx is not None:
-                with torch.no_grad(): # Ensure no gradient tracking during this in-place operation
+                with torch.no_grad():
                     module.weight[module.padding_idx].fill_(0)
-        elif isinstance(module, LayerNorm):
-            # LayerNorm weights (gamma) are initialized to 1 and biases (beta) to 0 by default
-            # within the LayerNorm class's __init__ if bias is enabled.
-            pass
-
 
     def forward(self, input_ids, attention_mask=None, labels=None):
         """
         Forward pass for the FactoredTransformerModel.
         Args:
             input_ids (torch.Tensor): Input token IDs (batch_size, sequence_length).
-            attention_mask (torch.Tensor, optional): Mask for padded tokens. Not directly used by
-                                                     FactoredCausalSelfAttention's causal mask but
-                                                     can be relevant for padding in embeddings if padding_idx is set.
-            labels (torch.Tensor, optional): Target token IDs for loss calculation (batch_size, sequence_length).
+            attention_mask (torch.Tensor, optional): Mask for padded tokens.
+            labels (torch.Tensor, optional): Target token IDs for loss calculation.
         Returns:
-            dict: A dictionary containing 'loss' (if labels are provided), 'logits',
-                  and optionally 'xt_final', 'xe_final' for debugging.
+            dict: A dictionary containing 'loss' (if labels provided) and 'logits'.
         """
         device = input_ids.device
-        b, t = input_ids.size() # batch_size, sequence_length
+        b, t = input_ids.size()
         assert t <= self.config.block_size, \
             f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
 
-        # Positional indices (0, 1, ..., t-1)
-        pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0) # Shape (1, t)
+        # Positional indices
+        pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
 
         # Initial Embeddings
-        tok_emb = self.transformer.wte(input_ids) # Token embeddings: (b, t, n_embd)
-        pos_emb = self.transformer.wpe(pos)       # Positional embeddings: (1, t, n_embd) broadcastable to (b,t,n_embd)
+        tok_emb = self.transformer.wte(input_ids)
+        pos_emb = self.transformer.wpe(pos)
         
         # Initialize xt and xe streams
-        xt = tok_emb + pos_emb # xt starts as the sum of token and positional embeddings
-        xt = self.transformer.drop(xt) # Apply dropout to the initial xt
-        xe = torch.zeros_like(xt, device=device) # xe starts as a zero tensor
+        xt = tok_emb + pos_emb
+        xt = self.transformer.drop(xt)
+        xe = torch.zeros_like(xt, device=device)
 
-        # Pass xt and xe through the stack of FactoredPreLNBlocks
+        # Pass through transformer blocks
         for block in self.transformer.h:
             xt, xe = block(xt, xe)
 
-        # Final combination and normalization for the output head
+        # Final combination and normalization
         x_final_combined = xt + xe
         x_final_normed = self.transformer.ln_f(x_final_combined)
 
-        # Language model head to get logits
-        logits = self.lm_head(x_final_normed) # Shape (b, t, vocab_size)
+        # Language model head
+        logits = self.lm_head(x_final_normed)
 
-        # Calculate loss if labels are provided
+        # Calculate loss if labels provided
         loss = None
         if labels is not None:
-            # Flatten the logits and labels for CrossEntropyLoss
-            # Logits: (batch_size * sequence_length, vocab_size)
-            # Labels: (batch_size * sequence_length)
-            # ignore_index=-100 is a common convention for padded tokens in labels.
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100) 
-            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+            # Shift labels for causal language modeling
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-        # Return results in a dictionary
-        # Optionally, return final xt and xe for analysis or debugging
-        return_dict = {'loss': loss, 'logits': logits}
-        # if self.config.get('output_xt_xe', False): # Example: control via config
-        #     return_dict['xt_final'] = xt
-        #     return_dict['xe_final'] = xe
-        return return_dict
+        return {'loss': loss, 'logits': logits}
 
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
         """
         Generate new tokens autoregressively.
         Args:
-            idx (torch.Tensor): Current context token IDs (batch_size, current_sequence_length).
+            idx (torch.Tensor): Current context token IDs.
             max_new_tokens (int): Maximum number of new tokens to generate.
-            temperature (float): Sampling temperature. Higher values make output more random.
-            top_k (int, optional): If set, restricts sampling to the top_k most likely tokens.
+            temperature (float): Sampling temperature.
+            top_k (int, optional): Top-k sampling.
         Returns:
-            torch.Tensor: The generated sequence of token IDs, including the initial context.
+            torch.Tensor: Generated sequence including initial context.
         """
-        self.eval() # Set the model to evaluation mode
+        self.eval()
 
-        # The generation loop re-evaluates the model with the growing sequence.
-        # The forward pass handles the xt, xe initialization internally based on `idx`.
         for _ in range(max_new_tokens):
-            # Ensure the context for the model does not exceed its block size
+            # Ensure context doesn't exceed block size
             idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
             
-            # Get model outputs (logits) for the current context
-            outputs = self(idx_cond) 
-            logits = outputs['logits'] # Shape (b, t_cond, vocab_size)
+            # Get model outputs
+            outputs = self(idx_cond)
+            logits = outputs['logits']
             
-            # Focus on the logits for the very last token in the sequence
-            logits = logits[:, -1, :] / temperature # Shape (b, vocab_size)
+            # Focus on last token's logits
+            logits = logits[:, -1, :] / temperature
 
             # Apply top-k filtering if specified
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                # Zero out logits for tokens not in the top k
                 logits[logits < v[:, [-1]]] = -float('Inf')
 
-            # Convert logits to probabilities using softmax
-            probs = F.softmax(logits, dim=-1) # Shape (b, vocab_size)
+            # Convert to probabilities and sample
+            probs = F.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
 
-            # Sample the next token index from the probability distribution
-            idx_next = torch.multinomial(probs, num_samples=1) # Shape (b, 1)
+            # Append to sequence
+            idx = torch.cat((idx, idx_next), dim=1)
 
-            # Append the sampled token to the current sequence
-            idx = torch.cat((idx, idx_next), dim=1) # Shape (b, t_current + 1)
-
-        self.train() # Set model back to training mode if it was in training before generate
+        self.train()
         return idx
-
