@@ -13,8 +13,12 @@ the typical internal transformer state vector (x = xt + xe).
   information, nor similarly modulating the embedding-like states, thereby preserving
   the natural informational structure of the internal states.
 - The factored representation provides a "dimensional analysis" accounting of the
-  internal states -- a central concept in the analysis of anything we should try to
-  measure (see e.g. P.W. Bridgman's "Dimensional Analysis").
+  internal states -- a central concept in the physical analysis of 
+  measurement (see e.g. P.W. Bridgman's "Dimensional Analysis").
+- The attention mechanism can be seen as a data-adaptive "token mixing" operation,
+  while the learned (but data-independent) value matricies and projection matricies are 
+  given an explicit symbolic "channel mixing" role -- where we define the sliced operations 
+  of the attention heads as a channel.
 """
 
 import math
