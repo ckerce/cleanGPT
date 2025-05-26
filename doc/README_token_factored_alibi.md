@@ -64,8 +64,8 @@ print(tokenizer.decode(generated[0], skip_special_tokens=True))
 The model maintains two parallel embedding streams:
 
 ```
-Input Tokens → Token Embeddings → xt (token stream)
-                                   xe (environment stream) ← zeros
+Input Tokens → Token Embeddings → xt (token-like stream)
+                                   xe (embedding-like stream) ← zeros
 ```
 
 ### Information Flow
@@ -105,22 +105,22 @@ attention_scores = (Q @ K.T) + alibi_slopes[:, None, None] * relative_positions
 
 ## Key Benefits
 
-### 🎯 **Length Extrapolation**
+### **Length Extrapolation**
 - **Training**: 256 tokens
 - **Inference**: 1024+ tokens
 - **Quality**: Better than truncation or naive extension
 
-### 💾 **Parameter Efficiency**
+### **Parameter Efficiency**
 - **Saves**: 10-15% of total parameters
 - **Example**: 98K fewer parameters for 256×384 model
 - **Memory**: Reduced storage and faster loading
 
-### 🏗️ **Structured Representations**
+### **Structured Representations**
 - **xt stream**: Token-specific information (attention-updated)
 - **xe stream**: Contextual information (MLP-updated)
 - **Interaction**: Cross-stream communication through normalization
 
-### 🚀 **Better Extrapolation**
+### **Better Extrapolation**
 - **No degradation**: Quality maintained at longer lengths
 - **Scalable**: Linear computational cost
 - **Flexible**: Configurable maximum inference length

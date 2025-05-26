@@ -8,14 +8,14 @@ Imports model architectures for easy access.
 from .model_SASPV import SASPTransformerModel
 from .model_Vanilla import VanillaTransformerModel
 from .model_token_factored import FactoredTransformerModel
-from .model_token_factored_alibi import FactoredTransformerModelALiBi  # Import the new ALiBi model
+from .model_token_factored_alibi import FactoredTransformerModelALiBi  
 
 # Dictionary mapping architecture names to model classes
 MODEL_REGISTRY = {
     "SASP": SASPTransformerModel,
     "Vanilla": VanillaTransformerModel,
     "Factored": FactoredTransformerModel,
-    "FactoredALiBi": FactoredTransformerModelALiBi,  # Add the new ALiBi model to the registry
+    "FactoredALiBi": FactoredTransformerModelALiBi,  
 }
 
 def get_model(model_type, config):
