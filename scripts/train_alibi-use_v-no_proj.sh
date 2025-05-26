@@ -1,6 +1,6 @@
 #!/bin/bash
 
-python ./examples/train_factored_alibi_example.py \
+python ./examples/train_factored_alibi_example_v2.py \
   --dataset "wikimedia/wikipedia" \
   --dataset_config "20231101.en" \
   --preset medium \
