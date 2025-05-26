@@ -15,7 +15,7 @@ python ./examples/train_factored_alibi_example.py \
   --batch_size 128 \
   --num_epochs 10 \
   --tokenizer_type gpt2 \
-  --output_dir "./outputs/output_alibi_v3" \
+  --output_dir "./outputs/alibi_test" \
   --test_generation \
   --use_v \
   --use_proj
@@ -28,7 +28,7 @@ python ./examples/train_factored_alibi_example.py \
   --batch_size 128 \
   --max_position_embeddings 512 \
   --tokenizer_type gpt2 \
-  --output_dir "./outputs/output_alibi_v3" \
+  --output_dir "./outputs/alibi-use_v-use_proj" \
   --test_generation \
   --use_v \
   --use_proj \
@@ -182,16 +182,32 @@ def test_length_extrapolation(model, tokenizer, device, config, output_dir, time
     
     # Test prompts of varying lengths
     test_prompts = [
-        "Once upon a time there was a little cat",  # Short prompt
-        "The rabbit found a big carrot in the garden. She was so happy because it was the biggest carrot she had ever seen",  # Medium prompt
-        "Tommy the turtle was very slow but he never gave up. Every day he would walk to the pond to see his friends the frogs and ducks. One sunny morning Tommy decided he wanted to learn how to swim just like his friends. He took a deep breath and slowly stepped into the cool water",  # Long prompt
-        "The little mouse was hungry",  # Short prompt
-        "Lily planted seeds in her garden. When the rain came, she watched from her window as tiny green shoots began to grow",  # Medium prompt
-        "The old oak tree in the park had been there for many years. Children would climb its branches and build tree houses in its shade. One day a little girl named Emma discovered something magical hidden in a hollow of the tree trunk",  # Long prompt
-        "The red ball rolled",  # Short prompt
-        "Sam saw a big dog. The dog wagged its tail and wanted to play fetch in the sunny park",  # Medium prompt
-        "Every night before bed, Lucy would look out her window at the stars. She would make a wish on the brightest star she could find. Tonight was special because there was a shooting star dancing across the dark sky"  # Long prompt
+        # Short Prompts
+        "The Renaissance was a period in European history, covering the span between the 14th and 17th centuries.",
+        "Photosynthesis is a process used by plants, algae, and certain bacteria to convert light energy into chemical energy.",
+        "The Amazon River in South America is the largest river by discharge volume of water in the world.",
+    
+        # Medium Prompts
+        "The Industrial Revolution, which began in Great Britain in the late 18th century, was a period of major industrialization and technological advancement. It marked a shift from hand production methods to machines, new chemical manufacturing and iron production processes, and the increasing use of steam power.",
+        "Quantum mechanics is a fundamental theory in physics that describes the physical properties of nature at the scale of atoms and subatomic particles. It is the foundation of all quantum physics including quantum chemistry, quantum field theory, quantum technology, and quantum information science.",
+        "The Great Wall of China is a series of fortifications made of stone, brick, tamped earth, wood, and other materials, generally built along an east-to-west line across the historical northern borders of China. Its purpose was to protect the Chinese states and empires against the raids and invasions of the various nomadic groups of the Eurasian Steppe.",
+    
+        # Long Prompts
+        "The history of the internet has its roots in the development of electronic computers in the 1950s and the emergence of ARPANET in the late 1960s. The ARPANET, commissioned by the United States Department of Defense, was one of the first operational packet switching networks. It served as a backbone for the development of protocols like TCP/IP, which became the standard for internet communication. By the early 1990s, the advent of the World Wide Web, developed by Tim Berners-Lee, made the internet accessible to a wider public, leading to its explosive growth.",
+        "Climate change refers to long-term shifts in temperatures and weather patterns. These shifts may be natural, but since the 1800s, human activities have been the main driver of climate change, primarily due to the burning of fossil fuels like coal, oil, and gas. Burning fossil fuels generates greenhouse gas emissions that act like a blanket wrapped around the Earth, trapping the sun’s heat and raising temperatures. The consequences include more frequent and intense droughts, storms, heat waves, rising sea levels, warming oceans, and loss of biodiversity.",
+        "Artificial intelligence (AI) is intelligence demonstrated by machines, as opposed to the natural intelligence displayed by humans and animals. Leading AI textbooks define the field as the study of 'intelligent agents': any device that perceives its environment and takes actions that maximize its chance of successfully achieving its goals. AI applications include advanced web search engines, recommendation systems, understanding human speech, self-driving cars, automated decision-making, and competing at the highest level in strategic game systems. As machines become increasingly capable, tasks considered to require 'intelligence' are often removed from the definition of AI, a phenomenon known as the AI effect."
     ]
+#    test_prompts = [
+#        "Once upon a time there was a little cat",  # Short prompt
+#        "The rabbit found a big carrot in the garden. She was so happy because it was the biggest carrot she had ever seen",  # Medium prompt
+#        "Tommy the turtle was very slow but he never gave up. Every day he would walk to the pond to see his friends the frogs and ducks. One sunny morning Tommy decided he wanted to learn how to swim just like his friends. He took a deep breath and slowly stepped into the cool water",  # Long prompt
+#        "The little mouse was hungry",  # Short prompt
+#        "Lily planted seeds in her garden. When the rain came, she watched from her window as tiny green shoots began to grow",  # Medium prompt
+#        "The old oak tree in the park had been there for many years. Children would climb its branches and build tree houses in its shade. One day a little girl named Emma discovered something magical hidden in a hollow of the tree trunk",  # Long prompt
+#        "The red ball rolled",  # Short prompt
+#        "Sam saw a big dog. The dog wagged its tail and wanted to play fetch in the sunny park",  # Medium prompt
+#        "Every night before bed, Lucy would look out her window at the stars. She would make a wish on the brightest star she could find. Tonight was special because there was a shooting star dancing across the dark sky"  # Long prompt
+#    ]
     
     # Test generation at different lengths
     generation_lengths = [50, 100, 200]  # These may exceed training block_size
