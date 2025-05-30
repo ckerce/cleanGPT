@@ -11,6 +11,7 @@ import os
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+from utils.logging_utils import JSONLogger
 
 # Assuming Callback is in base_trainer or accessible via from .base_trainer import Callback
 from .base_trainer import BaseTrainer, Callback
@@ -82,6 +83,8 @@ class SimpleTrainer(BaseTrainer):
             'final_loss': float('nan'), # Initialize with NaN
             'training_time': 0.0
         }
+        json_log_path = os.path.join(self.output_dir or ".", "train_log.json")
+        json_logger = JSONLogger(json_log_path)
 
         for epoch in range(1, self.num_epochs + 1): # Epochs 1-indexed for callbacks
             self.trainer_state['current_epoch'] = epoch
@@ -138,12 +141,27 @@ class SimpleTrainer(BaseTrainer):
                 self._trigger_callbacks('on_batch_end', batch_idx, logs={'loss': batch_loss_item})
                 progress_bar.set_postfix({"loss": f"{batch_loss_item:.4f}"})
 
+                json_logger.log({
+                    "type": "batch",
+                    "epoch": epoch,
+                    "batch_idx": batch_idx,
+                    "loss": batch_loss_item,
+                    "timestamp": time.time()
+                })
+                                
                 if batch_idx % self.log_interval == 0:
                     self.log_batch(batch_idx, batch_loss_item, epoch=epoch)
 
             avg_epoch_loss = epoch_loss / num_batches_processed if num_batches_processed > 0 else float('nan')
             training_metrics['epoch_losses'].append(avg_epoch_loss)
-
+            json_logger.log({
+                "type": "epoch",
+                "epoch": epoch,
+                "avg_loss": avg_epoch_loss,
+                "duration": epoch_duration,
+                "timestamp": time.time()
+            })
+                        
             epoch_duration = time.time() - epoch_start_time
             self.log_epoch(epoch, avg_epoch_loss) # Uses BaseTrainer's log_epoch
 
@@ -166,6 +184,8 @@ class SimpleTrainer(BaseTrainer):
         self.trainer_state.update(training_metrics)
         self._trigger_callbacks('on_train_end', logs=self.trainer_state)
 
+        json_logger.close()
+        
         return training_metrics
 
     def evaluate(self, eval_dataloader: Optional[DataLoader] = None) -> Dict[str, Any]:

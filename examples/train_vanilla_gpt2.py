@@ -110,7 +110,7 @@ def parse_args():
 def main():
     """Main function to run the training and generation example."""
     args = parse_args()
-    
+
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     logger.info(f"Output directory: {args.output_dir}")
