@@ -154,13 +154,6 @@ class SimpleTrainer(BaseTrainer):
 
             avg_epoch_loss = epoch_loss / num_batches_processed if num_batches_processed > 0 else float('nan')
             training_metrics['epoch_losses'].append(avg_epoch_loss)
-            json_logger.log({
-                "type": "epoch",
-                "epoch": epoch,
-                "avg_loss": avg_epoch_loss,
-                "duration": epoch_duration,
-                "timestamp": time.time()
-            })
                         
             epoch_duration = time.time() - epoch_start_time
             self.log_epoch(epoch, avg_epoch_loss) # Uses BaseTrainer's log_epoch
@@ -169,6 +162,14 @@ class SimpleTrainer(BaseTrainer):
             self.trainer_state.update(epoch_end_logs)
             self._trigger_callbacks('on_epoch_end', epoch, logs=self.trainer_state)
 
+            json_logger.log({
+                "type": "epoch",
+                "epoch": epoch,
+                "avg_loss": avg_epoch_loss,
+                "duration": epoch_duration,
+                "timestamp": time.time()
+            })
+            
             if self.output_dir:
                 checkpoint_path = os.path.join(self.output_dir, f"checkpoint_epoch_{epoch}.pt")
                 self.save_checkpoint(checkpoint_path, epoch=epoch, loss=avg_epoch_loss)
@@ -185,7 +186,7 @@ class SimpleTrainer(BaseTrainer):
         self._trigger_callbacks('on_train_end', logs=self.trainer_state)
 
         json_logger.close()
-        
+
         return training_metrics
 
     def evaluate(self, eval_dataloader: Optional[DataLoader] = None) -> Dict[str, Any]:
